@@ -2,6 +2,8 @@
 
 Ett verktyg för säljare att samla in underlag vid kundbesök: ytor, golvtyper, toaletter, fönster med mera. Det är en webbapp som läggs på mobilens hemskärm och fungerar utan internet. Allt sparas på den egna enheten, inget skickas till någon server.
 
+**Adress:** https://oscarnykil-byte.github.io/Verktyg-m-tare/
+
 ## För säljaren
 
 1. **Nytt besök**: ange kund och välj objektstyp. Objektstypen styr vilka frågor som visas.
@@ -62,6 +64,10 @@ Ren HTML, CSS och JavaScript utan byggsteg. Mappen kan läggas på vilket webbho
 | `vendor/` | Bibliotek för Excel och PDF |
 
 När en fil läggs till eller byter namn ska den också in i listan i `sw.js`, och `CACHE` där ska räknas upp.
+
+### Publicering
+
+Appen publiceras med GitHub Pages från grenen `main` (inställningen finns under *Settings → Pages* i repot). Allt som förs över till `main` publiceras automatiskt inom någon minut. Säljarna får den nya versionen nästa gång de öppnar appen med täckning: den hämtas i bakgrunden och visas vid starten därefter.
 
 ### Köra lokalt och testa
 
