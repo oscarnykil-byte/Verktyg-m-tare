@@ -67,13 +67,15 @@ const controls = {
   },
 
   counter: (f, v, onChange) => {
-    let n = typeof v === 'number' ? v : 0;
+    const min = f.min ?? 0;
+    let n = typeof v === 'number' ? v : min;
     const input = h('input', {
       type: 'text', inputMode: 'numeric', value: String(n), 'aria-label': f.label,
-      oninput: () => { n = Math.max(0, Math.round(parseNum(input.value) ?? 0)); onChange(n); },
+      oninput: () => { n = Math.max(min, Math.round(parseNum(input.value) ?? min)); onChange(n); },
+      onchange: () => { input.value = String(n); },
       onfocus: () => input.select(),
     });
-    const step = (d) => () => { n = Math.max(0, n + d); input.value = String(n); onChange(n); };
+    const step = (d) => () => { n = Math.max(min, n + d); input.value = String(n); onChange(n); };
     return h('div', { class: 'counter' },
       h('button', { type: 'button', class: 'step', onclick: step(-1), 'aria-label': 'Minska' }, '−'),
       input,

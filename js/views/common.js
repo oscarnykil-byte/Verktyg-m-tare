@@ -3,12 +3,12 @@ import { renderField } from '../fields.js';
 import { bySection } from '../template.js';
 import { h, openDialog, uid } from '../util.js';
 
-/** Frågorna som kort, grupperade under mallens rubriker. */
+/** Frågorna som kort, grupperade under mallens rubriker. changed anropas med frågan som ändrades. */
 export function fieldCards(fields, values, changed) {
   return bySection(fields).map(([section, list]) =>
     h('section', { class: 'card' },
       section && h('h3', {}, section),
-      list.map((f) => renderField(f, values[f.id], (v) => { values[f.id] = v; changed(); }))));
+      list.map((f) => renderField(f, values[f.id], (v) => { values[f.id] = v; changed(f); }))));
 }
 
 /**

@@ -2,7 +2,8 @@
 import { photosForVisit, putPhoto, putVisit } from './db.js';
 import { computeSummary } from './summary.js';
 import {
-  byRole, fieldsFor, formatValue, numericValue, objectFieldsOf, roomTitle, validateTemplate,
+  byRole, fieldsFor, formatValue, numericValue, objectFieldsOf, roomCount, roomFieldsOf, roomTemplateFields, roomTitle,
+  validateTemplate,
 } from './template.js';
 import { fileSafe, fmtNum, loadScript, shareOrDownload, uid } from './util.js';
 
@@ -61,17 +62,19 @@ export async function exportExcel(visit) {
   addSheet('Objekt', [['Uppgift', 'Värde'], ...objectRows(visit)]);
 
   // Ett rum per rad. Tal skrivs som tal så att det går att räkna vidare i Excel.
-  const header = ['Nr', 'Benämning'];
+  // Värdena gäller ett rum. Kolumnen Antal likadana rum visar hur många rum raden står för.
+  const header = ['Nr', 'Benämning', 'Antal likadana rum'];
   for (const f of plain) {
-    if (f.type === 'area') header.push(`${f.label} (m²)`, 'Längd (m)', 'Bredd (m)');
+    if (f.type === 'area') header.push(`${f.label} (m²)`, 'Längd (m)', 'Bredd (m)', `${f.label} totalt (m²)`);
     else header.push(f.label + (f.unit ? ` (${f.unit})` : ''));
   }
   header.push(...customs, 'Anteckningar', 'Antal foton');
   const roomRows = visit.rooms.map((room, i) => {
-    const row = [i + 1, roomTitle(visit, room, i)];
+    const row = [i + 1, roomTitle(visit, room, i), roomCount(room)];
+    const shown = new Set(roomTemplateFields(visit, room).map((f) => f.id));
     for (const f of plain) {
-      const v = room.values[f.id];
-      if (f.type === 'area') row.push(v?.a ?? '', v?.l ?? '', v?.w ?? '');
+      const v = shown.has(f.id) ? room.values[f.id] : undefined;
+      if (f.type === 'area') row.push(v?.a ?? '', v?.l ?? '', v?.w ?? '', v?.a > 0 ? v.a * roomCount(room) : '');
       else row.push(numericValue(f, v) ?? formatValue(f, v));
     }
     row.push(...customs.map((label) => customRoomValue(room, label)), room.notes || '',
@@ -82,10 +85,11 @@ export async function exportExcel(visit) {
 
   // Ett blad per upprepande fält, t.ex. Fönster.
   for (const g of groups) {
-    const rows = [['Rum nr', 'Rum', ...g.subfields.map((s) => s.label)]];
+    const rows = [['Rum nr', 'Rum', 'Antal likadana rum', ...g.subfields.map((s) => s.label)]];
     visit.rooms.forEach((room, i) => {
+      if (!roomTemplateFields(visit, room).includes(g)) return;
       for (const r of room.values[g.id] || []) {
-        rows.push([i + 1, roomTitle(visit, room, i),
+        rows.push([i + 1, roomTitle(visit, room, i), roomCount(room),
           ...g.subfields.map((s) => numericValue(s, r[s.id]) ?? formatValue(s, r[s.id]))]);
       }
     });
@@ -201,17 +205,18 @@ export async function exportPdf(visit) {
   const type = byRole(template, 'roomType'), area = byRole(template, 'area'), floor = byRole(template, 'floorType');
   if (visit.rooms.length) {
     heading('Rum');
-    table(['Nr', 'Benämning', 'Lokaltyp', 'Yta (m²)', 'Golvtyp'], visit.rooms.map((room, i) => [
-      i + 1, roomTitle(visit, room, i),
+    table(['Nr', 'Benämning', 'Antal', 'Lokaltyp', 'Yta per rum (m²)', 'Golvtyp'], visit.rooms.map((room, i) => [
+      i + 1, roomTitle(visit, room, i), roomCount(room),
       type ? room.values[type.id] || '' : '',
       area ? fmtNum(room.values[area.id]?.a) : '',
       floor ? room.values[floor.id] || '' : '',
     ]));
   }
   for (const [i, room] of visit.rooms.entries()) {
-    heading(`${i + 1}. ${roomTitle(visit, room, i)}`, 11);
+    const n = roomCount(room);
+    heading(`${i + 1}. ${roomTitle(visit, room, i)}${n > 1 ? ` (${n} likadana rum)` : ''}`, 11);
     const rows = [];
-    for (const f of [...fieldsFor(template.roomFields, visit.objectTypeId), ...(room.customFields || [])]) {
+    for (const f of roomFieldsOf(visit, room)) {
       const v = room.values[f.id];
       if (f.type === 'group') {
         (v || []).forEach((r, n) => rows.push([`${f.label} ${n + 1}`,

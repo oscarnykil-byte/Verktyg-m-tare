@@ -1,7 +1,8 @@
 // Formuläret för ett rum.
 import { deletePhoto, getVisit, photosForVisit, putVisit } from '../db.js';
 import { photoSection } from '../photos.js';
-import { fieldsFor, roomTitle } from '../template.js';
+import { renderField } from '../fields.js';
+import { applyTypeDefaults, createRoom, roomTemplateFields, roomTitle } from '../template.js';
 import { debounce, h, uid } from '../util.js';
 import { customFieldsCard, fieldCards, notesCard } from './common.js';
 
@@ -24,12 +25,26 @@ export async function roomView(app, { id, roomId }) {
 
   const newRoom = async () => {
     await save.flush();
-    const next = { id: uid(), name: '', values: {}, customFields: [], notes: '' };
+    const next = createRoom(uid(), visit.template, room);
     visit.rooms.push(next);
     visit.updated = Date.now();
     await putVisit(visit);
     app.go(`#/visit/${id}/room/${next.id}`);
   };
+
+  // Frågorna ritas om när lokaltypen ändras, eftersom den styr både vilka frågor som visas och förvalen.
+  const questions = h('div', { class: 'stack' });
+  const drawQuestions = () => questions.replaceChildren(
+    ...fieldCards(roomTemplateFields(visit, room), room.values, fieldChanged));
+  const fieldChanged = (f) => {
+    if (room.auto) delete room.auto[f.id]; // säljarens eget svar ska inte skrivas över av förval
+    if (f.role === 'roomType') {
+      applyTypeDefaults(visit.template, room);
+      drawQuestions();
+    }
+    save();
+  };
+  drawQuestions();
 
   app.show(
     h('section', { class: 'card' },
@@ -39,8 +54,12 @@ export async function roomView(app, { id, roomId }) {
         h('input', {
           type: 'text', value: room.name || '',
           oninput: (e) => { room.name = e.target.value; save(); },
-        }))),
-    fieldCards(fieldsFor(visit.template.roomFields, visit.objectTypeId), room.values, save),
+        })),
+      renderField({
+        id: '_count', label: 'Antal likadana rum', type: 'counter', min: 1,
+        help: 'Fyll i rummet en gång. Ytor och antal räknas gånger så här många.',
+      }, room.count || 1, (n) => { room.count = n; save(); })),
+    questions,
     customFieldsCard(room, save),
     notesCard(room, save),
     photoSection(id, room.id, photos),

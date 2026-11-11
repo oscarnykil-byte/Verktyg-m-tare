@@ -1,6 +1,7 @@
 // Mallredigeraren: här ändras frågor, alternativ och objektstyper utan kod.
+import { renderField } from '../fields.js';
 import {
-  FIELD_TYPES, SUBFIELD_TYPES, getShippedTemplate, getTemplate, newerShippedAvailable, saveTemplate, validateTemplate,
+  FIELD_TYPES, byRole, isEmpty, SUBFIELD_TYPES, getShippedTemplate, getTemplate, newerShippedAvailable, saveTemplate, validateTemplate,
 } from '../template.js';
 import { fileSafe, h, openDialog, pickTextFile, shareOrDownload, toast, uid } from '../util.js';
 
@@ -124,7 +125,23 @@ function describe(f, template) {
   if (f.objectTypes?.length) {
     parts.push('bara ' + f.objectTypes.map((id) => template.objectTypes.find((o) => o.id === id)?.label).filter(Boolean).join(', '));
   }
+  if (f.roomTypes?.length) parts.push('bara ' + f.roomTypes.join(', '));
+  if (f.inherit) parts.push('förifylls');
   return parts.join(' · ');
+}
+
+/** Tar bort hänvisningar till lokaltyper som inte längre finns bland alternativen. */
+function pruneRoomTypes(template) {
+  const typeField = byRole(template, 'roomType');
+  if (!typeField) return;
+  const valid = new Set(typeField.options);
+  for (const f of template.roomFields) {
+    if (f.roomTypes) {
+      f.roomTypes = f.roomTypes.filter((t) => valid.has(t));
+      if (!f.roomTypes.length) delete f.roomTypes;
+    }
+  }
+  for (const t of Object.keys(typeField.defaults || {})) if (!valid.has(t)) delete typeField.defaults[t];
 }
 
 function fieldListCard(title, hint, fields, scope, template, changed) {
@@ -144,6 +161,7 @@ function fieldListCard(title, hint, fields, scope, template, changed) {
           const next = await fieldDialog(f, scope, template);
           if (!next) return;
           fields[i] = next;
+          if (next.role === 'roomType') pruneRoomTypes(template);
           draw();
           changed();
         },
@@ -159,6 +177,7 @@ function fieldListCard(title, hint, fields, scope, template, changed) {
         onclick: () => {
           if (!confirm(`Ta bort frågan "${f.label}"?`)) return;
           fields.splice(i, 1);
+          for (const d of Object.values((scope === 'room' && byRole(template, 'roomType')?.defaults) || {})) delete d[f.id];
           draw();
           changed();
         },
@@ -224,6 +243,38 @@ function fieldDialog(original, scope, template) {
       }, '+ Delfält'));
   };
 
+  // Förval per lokaltyp: svar som fylls i automatiskt när säljaren väljer lokaltypen.
+  const defaultsEditor = () => {
+    f.defaults ||= {};
+    const list = h('div', {});
+    const names = () => options.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    const summary = (type) => {
+      const d = f.defaults[type] || {};
+      const parts = Object.entries(d).map(([id, v]) => {
+        const q = template.roomFields.find((x) => x.id === id);
+        return q && `${q.label}: ${v === true ? 'Ja' : v === false ? 'Nej' : v}`;
+      }).filter(Boolean);
+      return parts.length ? parts.join(', ') : 'Inga förval';
+    };
+    const draw = () => list.replaceChildren(...names().map((type) =>
+      h('div', { class: 'q-row' },
+        h('button', {
+          type: 'button', class: 'q-main',
+          onclick: async () => {
+            const next = await defaultsDialog(type, f.defaults[type] || {}, template);
+            if (!next) return;
+            if (Object.keys(next).length) f.defaults[type] = next; else delete f.defaults[type];
+            draw();
+          },
+        }, h('div', { class: 'q-label' }, type), h('div', { class: 'muted' }, summary(type))))));
+    draw();
+    options.addEventListener('change', draw);
+    return h('div', { class: 'field' },
+      h('div', { class: 'field-label' }, 'Förval per lokaltyp'),
+      h('div', { class: 'field-help' }, 'Fylls i automatiskt när lokaltypen väljs. Säljaren kan alltid ändra. Tryck på en lokaltyp för att ange förval.'),
+      list);
+  };
+
   const extra = h('div', {});
   const drawExtra = () => {
     const t = f.type;
@@ -236,6 +287,9 @@ function fieldDialog(original, scope, template) {
         subList),
       scope === 'room' && (t === 'number' || t === 'counter') && check('sum', 'Summera för hela objektet i summeringen'),
       scope === 'room' && t === 'choice' && check('breakdown', 'Visa yta per alternativ i summeringen'),
+      scope === 'room' && !f.role?.match(/roomType|area/) && t !== 'group' &&
+        check('inherit', 'Förifyll med svaret från föregående rum'),
+      f.role === 'roomType' && defaultsEditor(),
     ].filter(Boolean));
     if (t === 'group') drawSubs();
   };
@@ -254,6 +308,20 @@ function fieldDialog(original, scope, template) {
         },
       }), o.label)));
 
+  const roomTypeField = byRole(template, 'roomType');
+  const roomTypeChecks = scope === 'room' && !f.role && roomTypeField && h('div', { class: 'field' },
+    h('div', { class: 'field-label' }, 'Gäller lokaltyper'),
+    h('div', { class: 'field-help' }, 'Inget ikryssat betyder att frågan visas för alla lokaltyper.'),
+    h('div', { class: 'check-grid' }, roomTypeField.options.map((o) => h('label', { class: 'check' },
+      h('input', {
+        type: 'checkbox', checked: !!f.roomTypes?.includes(o),
+        onchange: (e) => {
+          const set = new Set(f.roomTypes || []);
+          if (e.target.checked) set.add(o); else set.delete(o);
+          f.roomTypes = roomTypeField.options.filter((x) => set.has(x));
+        },
+      }), o))));
+
   return openDialog({
     title: original ? 'Ändra fråga' : 'Ny fråga',
     okLabel: 'Klar',
@@ -265,6 +333,7 @@ function fieldDialog(original, scope, template) {
       scope !== 'sub' && row('Rubrik att visas under', section, 'Frågor med samma rubrik visas tillsammans.'),
       scope !== 'sub' && row('Hjälptext', help),
       typeChecks,
+      roomTypeChecks,
     ],
     onOk: () => {
       const out = { id: f.id, label: label.value.trim(), type: f.type };
@@ -287,7 +356,32 @@ function fieldDialog(original, scope, template) {
       }
       if (scope === 'room' && (out.type === 'number' || out.type === 'counter') && f.sum) out.sum = true;
       if (scope === 'room' && out.type === 'choice' && f.breakdown) out.breakdown = true;
+      if (scope === 'room' && !f.role && f.roomTypes?.length) out.roomTypes = f.roomTypes;
+      if (scope === 'room' && out.type !== 'group' && f.inherit) out.inherit = true;
+      if (f.role === 'roomType' && f.defaults) {
+        out.defaults = Object.fromEntries(Object.entries(f.defaults).filter(([t]) => out.options.includes(t)));
+      }
       return out;
     },
+  });
+}
+
+/** Formulär för en lokaltyps förval. Använder samma fält som säljaren ser i rummet. */
+function defaultsDialog(type, current, template) {
+  const values = structuredClone(current);
+  const fields = template.roomFields.filter((q) =>
+    !q.role?.match(/roomType|area/) && ['choice', 'counter', 'number', 'yesno', 'text'].includes(q.type) &&
+    (!q.roomTypes?.length || q.roomTypes.includes(type)));
+  return openDialog({
+    title: `Förval för ${type}`,
+    okLabel: 'Klar',
+    body: [
+      h('p', { class: 'muted' }, 'Fyll bara i det som nästan alltid stämmer. Lämna resten tomt.'),
+      fields.map((q) => renderField({ ...q, required: false, help: null }, values[q.id], (v) => { values[q.id] = v; })),
+    ],
+    onOk: () => Object.fromEntries(Object.entries(values).filter(([id, v]) => {
+      const q = fields.find((x) => x.id === id);
+      return q && !isEmpty(q, v) && !(q.type === 'counter' && v === 0);
+    })),
   });
 }

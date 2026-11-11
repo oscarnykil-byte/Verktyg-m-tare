@@ -6,7 +6,10 @@ Ett verktyg för säljare att samla in underlag vid kundbesök: ytor, golvtyper,
 
 1. **Nytt besök**: ange kund och välj objektstyp. Objektstypen styr vilka frågor som visas.
 2. **Objekt**: fyll i uppgifter som gäller hela objektet.
-3. **Rum**: lägg till ett rum i taget. Ange yta direkt i m², eller längd och bredd så räknas ytan ut. Likadana rum kan kopieras.
+3. **Rum**: lägg till ett rum i taget. Ange yta direkt i m², eller längd och bredd så räknas ytan ut.
+   - Lokaltypen styr vilka frågor som visas, så välj den först. Den fyller också i förval, till exempel klinker och en toalett för WC.
+   - Våning och golvtyp följer med från föregående rum.
+   - Finns flera likadana rum fylls rummet i en gång och antalet anges i *Antal likadana rum*. Rum som nästan är lika kan kopieras.
 4. **Eget fält**: när mallen inte räcker går det att lägga till en egen fråga på objektet eller rummet.
 5. **Summering**: visar total yta, yta per golvtyp och lokaltyp, antal toaletter, fönster per typ och vilka obligatoriska uppgifter som saknas.
 6. **Exportera**: Excel för kalkylen, PDF med foton som rapport. Filen delas via mobilens delningsmeny, till exempel med mejl.
@@ -28,6 +31,9 @@ Under **Mall och frågor** på startsidan ändras frågorna utan kod:
 - Välj typ av svar: text, tal, yta, räknare, ja/nej, ett eller flera alternativ, eller upprepande rader (som fönster).
 - Markera frågor som obligatoriska och begränsa dem till vissa objektstyper.
 - Välj vilka tal som ska summeras och vilka alternativ ytan ska delas upp på i summeringen.
+- Begränsa en rumsfråga till vissa lokaltyper, så att till exempel toaletter bara efterfrågas i WC.
+- Välj vilka svar som ska förifyllas från föregående rum.
+- Ange förval per lokaltyp: öppna frågan *Lokaltyp* och tryck på en lokaltyp.
 
 Ändringar gäller nya besök. Påbörjade besök behåller mallen de skapades med, men kan bytas till den senaste mallen från summeringen.
 

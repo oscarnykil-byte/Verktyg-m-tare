@@ -72,6 +72,9 @@ const step = (name) => console.log('✓ ' + name);
   await page.getByRole('button', { name: '+ Lägg till rum' }).click();
   await page.waitForURL(/\/room\//);
   await field('lokaltyp').locator('select').selectOption('Klassrum');
+  assert.equal(await field('toaletter').count(), 0, 'toaletter ska inte visas för klassrum');
+  assert.equal(await field('tvattstall').count(), 1);
+  await field('vaning').locator('input').fill('Plan 2');
   await field('yta').getByLabel('Längd').fill('8');
   await field('yta').getByLabel('Bredd').fill('7,5');
   assert.equal(await field('yta').getByLabel('Yta').inputValue(), '60');
@@ -92,11 +95,25 @@ const step = (name) => console.log('✓ ' + name);
 
   // Rum 2: WC 4 m² direkt, klinker, 2 toaletter.
   await nextRoom();
+  // Våning och golvtyp följer med från föregående rum, och lokaltypens förval fylls i.
+  assert.equal(await field('vaning').locator('input').inputValue(), 'Plan 2');
+  assert.equal(await field('golvtyp').locator('select').inputValue(), 'Linoleum');
+  assert.equal(await field('toaletter').count(), 0);
   await field('lokaltyp').locator('select').selectOption('WC');
-  await field('yta').getByLabel('Yta').fill('4');
+  assert.equal(await field('golvtyp').locator('select').inputValue(), 'Klinker');
+  assert.equal(await field('toaletter').locator('input').inputValue(), '1');
+  assert.equal(await field('tvattstall').locator('input').inputValue(), '1');
+  // Byte av lokaltyp tar bort förvalen igen, och eget svar skrivs inte över.
+  await field('lokaltyp').locator('select').selectOption('Förråd');
+  assert.equal(await field('golvtyp').locator('select').inputValue(), '');
+  await field('golvtyp').locator('select').selectOption('Sten');
+  await field('lokaltyp').locator('select').selectOption('WC');
+  assert.equal(await field('golvtyp').locator('select').inputValue(), 'Sten');
   await field('golvtyp').locator('select').selectOption('Klinker');
-  await field('toaletter').getByRole('button', { name: 'Öka' }).click({ clickCount: 2 });
+  await field('yta').getByLabel('Yta').fill('4');
+  await field('toaletter').getByRole('button', { name: 'Öka' }).click();
   await settle();
+  step('förval från föregående rum och lokaltyp');
 
   // Rum 3: saknar obligatoriska uppgifter.
   await nextRoom();
@@ -109,22 +126,26 @@ const step = (name) => console.log('✓ ' + name);
   await page.locator('.room-card').nth(1).getByRole('button', { name: 'Kopiera' }).click();
   await page.waitForURL(/\/room\//);
   assert.equal(await field('yta').getByLabel('Yta').inputValue(), '4');
+  await field('_count').getByRole('button', { name: 'Öka' }).click({ clickCount: 2 });
+  await settle();
   await page.getByRole('link', { name: 'Klar' }).click();
   await page.locator('.room-card').nth(3).waitFor();
   await shot('3-rumslista');
-  step('fyra rum, varav ett kopierat');
+  assert.match(await page.locator('.room-card').nth(2).innerText(), /× 3/);
+  step('fyra rader, varav en står för tre likadana rum');
 
   // Summering.
   await page.getByRole('link', { name: 'Summering' }).click();
   await page.locator('.tiles').waitFor();
   const text = await page.locator('#main').innerText();
-  assert.match(text, /4 obligatoriska uppgifter saknas/); // städfrekvens samt rum 3: lokaltyp, yta, golvtyp
+  assert.match(text, /3 obligatoriska uppgifter saknas/); // städfrekvens samt rum 3: lokaltyp och yta (golvtypen ärvs)
   assert.match(text, /Objektet: Städfrekvens/);
-  assert.match(text, /Rum 3: Golvtyp/);
-  assert.deepEqual(await page.locator('.tile-num').allInnerTexts(), ['4', '68']);
-  assert.match(text, /Toaletter\s+4 st/);
+  assert.match(text, /Rum 3: Yta/);
+  assert.deepEqual(await page.locator('.tile-num').allInnerTexts(), ['6', '76']);
+  assert.match(text, /Toaletter\s+8 st/);
+  assert.match(text, /Tvättställ\s+4 st/);
   assert.match(text, /Linoleum\s+60\s+1/);
-  assert.match(text, /Klinker\s+8\s+2/);
+  assert.match(text, /Klinker\s+16\s+5/);
   assert.match(text, /2-luft\s+4/);
   assert.match(text, /Glasdörr\s+1/);
   await shot('4-summering');
@@ -148,8 +169,11 @@ const step = (name) => console.log('✓ ' + name);
   assert.equal(rum.length, 5);
   assert.strictEqual(rum[1][rum[0].indexOf('Yta (m²)')], 60);
   assert.strictEqual(rum[1][rum[0].indexOf('Antal foton')], 1);
-  assert.deepEqual(rows('Fönster')[1].slice(0, 4), [1, 'Klassrum', '2-luft', 4]);
-  assert.ok(rows('Summering').some((r) => r[0] === 'Total yta' && r[1] === 68));
+  assert.deepEqual(rows('Fönster')[1].slice(0, 5), [1, 'Klassrum', 1, '2-luft', 4]);
+  assert.strictEqual(rum[3][rum[0].indexOf('Antal likadana rum')], 3);
+  assert.strictEqual(rum[3][rum[0].indexOf('Yta totalt (m²)')], 12);
+  assert.strictEqual(rum[1][rum[0].indexOf('Toaletter')], '', 'klassrum har ingen toalettuppgift');
+  assert.ok(rows('Summering').some((r) => r[0] === 'Total yta' && r[1] === 76));
   step('Excel-filen har rätt innehåll');
 
   // PDF.
@@ -181,13 +205,25 @@ const step = (name) => console.log('✓ ' + name);
   await page.locator('dialog input[type=text]').first().fill('Antal whiteboards');
   await page.locator('dialog select').selectOption('counter');
   await page.locator('dialog').getByLabel('Summera för hela objektet').check();
+  await page.locator('dialog .check-grid').getByLabel('Klassrum').check();
   await page.getByRole('button', { name: 'Klar', exact: true }).click();
   await roomCard.getByText('Antal whiteboards').waitFor();
+  // Förval: klassrum får 1 whiteboard.
+  await roomCard.getByRole('button', { name: /^Lokaltyp/ }).click();
+  await page.locator('dialog').getByRole('button', { name: /^Klassrum/ }).click();
+  const dlg = page.locator('dialog').last();
+  await dlg.locator('[data-field]', { hasText: 'Antal whiteboards' }).getByRole('button', { name: 'Öka' }).click();
+  await dlg.getByRole('button', { name: 'Klar', exact: true }).click();
+  await page.locator('dialog').getByText('Antal whiteboards: 1').waitFor();
+  await page.getByRole('button', { name: 'Klar', exact: true }).click();
   await page.waitForTimeout(300);
   await shot('6-mall');
   const [tplDl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Exportera mall' }).click()]);
   const tpl = JSON.parse(fs.readFileSync(await tplDl.path(), 'utf8'));
-  assert.ok(tpl.roomFields.some((f) => f.label === 'Antal whiteboards' && f.sum));
+  const wb2 = tpl.roomFields.find((f) => f.label === 'Antal whiteboards');
+  assert.ok(wb2.sum);
+  assert.deepEqual(wb2.roomTypes, ['Klassrum']);
+  assert.equal(tpl.roomFields.find((f) => f.role === 'roomType').defaults.Klassrum[wb2.id], 1);
   assert.equal(tpl.origin, undefined);
 
   await page.goto(url + '#/');
@@ -200,7 +236,7 @@ const step = (name) => console.log('✓ ' + name);
 
   // Offline: ladda om utan nät och skapa ett besök med den nya mallen.
   await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.waitForFunction(() => caches.open('matverktyg-v1').then((c) => c.keys()).then((k) => k.length > 20));
+  await page.waitForFunction(() => caches.open('matverktyg-v2').then((c) => c.keys()).then((k) => k.length > 20));
   await ctx.setOffline(true);
   await page.goto(url + '#/');
   await page.reload();
@@ -210,7 +246,11 @@ const step = (name) => console.log('✓ ' + name);
   await page.getByRole('button', { name: 'Starta' }).click();
   await page.getByRole('link', { name: /^Rum/ }).click();
   await page.getByRole('button', { name: '+ Lägg till rum' }).click();
-  await page.getByText('Antal whiteboards').waitFor();
+  await field('lokaltyp').waitFor();
+  assert.equal(await page.getByText('Antal whiteboards').count(), 0);
+  await field('lokaltyp').locator('select').selectOption('Klassrum');
+  assert.equal(await page.locator('[data-field]', { hasText: 'Antal whiteboards' }).locator('input').inputValue(), '1');
+  await settle();
   await page.getByRole('link', { name: 'Klar' }).click();
   await page.getByRole('link', { name: 'Summering' }).click();
   const offXlsx = await download('Excel');

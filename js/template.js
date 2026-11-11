@@ -98,10 +98,69 @@ export function fieldsFor(fields, objectTypeId) {
 
 export const objectFieldsOf = (visit) =>
   [...fieldsFor(visit.template.objectFields, visit.objectTypeId), ...(visit.customFields || [])];
-export const roomFieldsOf = (visit, room) =>
-  [...fieldsFor(visit.template.roomFields, visit.objectTypeId), ...(room.customFields || [])];
 
 export const byRole = (template, role) => template.roomFields.find((f) => f.role === role);
+
+export const roomTypeOf = (template, room) => {
+  const type = byRole(template, 'roomType');
+  return (type && room.values[type.id]) || null;
+};
+
+/** Mallens frågor för ett rum: de som gäller objektstypen och rummets lokaltyp. */
+export function roomTemplateFields(visit, room) {
+  const type = roomTypeOf(visit.template, room);
+  return fieldsFor(visit.template.roomFields, visit.objectTypeId)
+    .filter((f) => !f.roomTypes?.length || f.roomTypes.includes(type));
+}
+
+export const roomFieldsOf = (visit, room) =>
+  [...roomTemplateFields(visit, room), ...(room.customFields || [])];
+
+/** Antal likadana rum som raden står för (minst 1). */
+export const roomCount = (room) => Math.max(1, Math.round(room.count || 1));
+
+/**
+ * Skapar ett nytt rum. Frågor märkta "förifyll från föregående rum" (t.ex. våning och golvtyp)
+ * får samma svar som i rummet innan.
+ */
+export function createRoom(id, template, previous) {
+  const room = { id, name: '', count: 1, values: {}, auto: {}, customFields: [], notes: '' };
+  if (previous) {
+    for (const f of template.roomFields) {
+      if (f.inherit && !isEmpty(f, previous.values[f.id])) {
+        room.values[f.id] = structuredClone(previous.values[f.id]);
+        room.auto[f.id] = 'inherit';
+      }
+    }
+  }
+  return room;
+}
+
+/**
+ * Fyller i lokaltypens förval. Svar som säljaren själv har skrivit rörs inte:
+ * bara tomma fält och fält som fyllts i automatiskt (room.auto) ändras.
+ */
+export function applyTypeDefaults(template, room) {
+  const typeField = byRole(template, 'roomType');
+  if (!typeField) return;
+  room.auto ||= {};
+  const defaults = typeField.defaults?.[room.values[typeField.id]] || {};
+  // Förval från en tidigare vald lokaltyp tas bort om de inte gäller längre.
+  for (const [id, how] of Object.entries(room.auto)) {
+    if (how === 'default' && !(id in defaults)) {
+      delete room.values[id];
+      delete room.auto[id];
+    }
+  }
+  for (const [id, value] of Object.entries(defaults)) {
+    const f = template.roomFields.find((x) => x.id === id);
+    if (!f) continue;
+    if (isEmpty(f, room.values[id]) || room.auto[id]) {
+      room.values[id] = structuredClone(value);
+      room.auto[id] = 'default';
+    }
+  }
+}
 
 export function isEmpty(field, v) {
   if (v == null || v === '') return true;

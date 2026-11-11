@@ -1,5 +1,7 @@
 // Räknar fram nyckeltal för ett besök och hittar obligatoriska frågor som saknar svar.
-import { byRole, fieldsFor, isEmpty, numericValue, objectFieldsOf, roomFieldsOf, roomTitle } from './template.js';
+import {
+  byRole, fieldsFor, isEmpty, numericValue, objectFieldsOf, roomCount, roomFieldsOf, roomTemplateFields, roomTitle,
+} from './template.js';
 import { round } from './util.js';
 
 const add = (map, key, n) => map.set(key, (map.get(key) || 0) + n);
@@ -8,7 +10,11 @@ export function computeSummary(visit) {
   const template = visit.template;
   const roomFields = fieldsFor(template.roomFields, visit.objectTypeId);
   const areaField = byRole(template, 'area');
-  const areaOf = (room) => (areaField && numericValue(areaField, room.values[areaField.id])) || 0;
+  // En rad kan stå för flera likadana rum: allt räknas gånger antalet.
+  const areaOf = (room) => ((areaField && numericValue(areaField, room.values[areaField.id])) || 0) * roomCount(room);
+  // Svar på frågor som inte gäller rummets lokaltyp räknas inte med.
+  const shown = new Map(visit.rooms.map((r) => [r, new Set(roomTemplateFields(visit, r).map((f) => f.id))]));
+  const applies = (room, f) => shown.get(room).has(f.id);
 
   const totalArea = round(visit.rooms.reduce((sum, r) => sum + areaOf(r), 0));
 
@@ -19,7 +25,7 @@ export function computeSummary(visit) {
     for (const room of visit.rooms) {
       const key = room.values[f.id] || '(ej angivet)';
       add(area, key, areaOf(room));
-      add(count, key, 1);
+      add(count, key, roomCount(room));
     }
     return {
       label: f.label,
@@ -32,7 +38,8 @@ export function computeSummary(visit) {
   const sums = roomFields.filter((f) => f.sum && (f.type === 'counter' || f.type === 'number')).map((f) => ({
     label: f.label,
     unit: f.unit || (f.type === 'counter' ? 'st' : ''),
-    total: round(visit.rooms.reduce((s, r) => s + (numericValue(f, r.values[f.id]) || 0), 0)),
+    total: round(visit.rooms.reduce((s, r) =>
+      s + (applies(r, f) ? (numericValue(f, r.values[f.id]) || 0) * roomCount(r) : 0), 0)),
   }));
 
   // Upprepande rader (t.ex. fönster): summa per alternativ i första envalsfältet.
@@ -41,12 +48,14 @@ export function computeSummary(visit) {
     const nums = f.subfields.filter((s) => s.type === 'counter' || s.type === 'number');
     const totals = new Map();
     for (const room of visit.rooms) {
+      if (!applies(room, f)) continue;
+      const n = roomCount(room);
       for (const row of room.values[f.id] || []) {
         const k = (key && row[key.id]) || (key ? '(ej angivet)' : 'Totalt');
         if (!totals.has(k)) totals.set(k, { rows: 0, nums: nums.map(() => 0) });
         const t = totals.get(k);
-        t.rows += 1;
-        nums.forEach((s, i) => { t.nums[i] += numericValue(s, row[s.id]) || 0; });
+        t.rows += n;
+        nums.forEach((s, i) => { t.nums[i] += (numericValue(s, row[s.id]) || 0) * n; });
       }
     }
     return {
@@ -57,7 +66,7 @@ export function computeSummary(visit) {
     };
   });
 
-  return { roomCount: visit.rooms.length, totalArea, breakdowns, sums, groups, missing: findMissing(visit) };
+  return { roomCount: visit.rooms.reduce((s, r) => s + roomCount(r), 0), totalArea, breakdowns, sums, groups, missing: findMissing(visit) };
 }
 
 /** Obligatoriska frågor utan svar, med uppgift om var de finns. */

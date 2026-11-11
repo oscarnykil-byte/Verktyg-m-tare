@@ -3,7 +3,7 @@ import { deleteVisit, getVisit, photosForVisit, putVisit } from '../db.js';
 import { exportBackup, exportExcel, exportPdf } from '../export.js';
 import { photoSection } from '../photos.js';
 import { computeSummary, roomMissingCount } from '../summary.js';
-import { byRole, fieldsFor, formatValue, getTemplate, roomTitle } from '../template.js';
+import { byRole, createRoom, fieldsFor, formatValue, getTemplate, roomCount, roomTitle } from '../template.js';
 import { debounce, fmtNum, h, toast, uid } from '../util.js';
 import { customFieldsCard, fieldCards, notesCard } from './common.js';
 
@@ -43,9 +43,9 @@ function objectTab(app, visit, photos, save) {
         },
       }));
 
-  const questions = h('div', {});
+  const questions = h('div', { class: 'stack' });
   const drawQuestions = () => questions.replaceChildren(
-    ...fieldCards(fieldsFor(visit.template.objectFields, visit.objectTypeId), visit.values, save));
+    ...fieldCards(fieldsFor(visit.template.objectFields, visit.objectTypeId), visit.values, () => save()));
   drawQuestions();
 
   app.show(
@@ -77,7 +77,7 @@ function roomsTab(app, visit, photos) {
   const addRoom = async (copyOf) => {
     const room = copyOf
       ? { ...structuredClone(copyOf), id: uid(), name: copyOf.name ? `${copyOf.name} (kopia)` : '' }
-      : { id: uid(), name: '', values: {}, customFields: [], notes: '' };
+      : createRoom(uid(), template, visit.rooms.at(-1));
     // Nytt rum hamnar sist, en kopia direkt efter originalet.
     if (copyOf) visit.rooms.splice(visit.rooms.indexOf(copyOf) + 1, 0, room);
     else visit.rooms.push(room);
@@ -93,7 +93,8 @@ function roomsTab(app, visit, photos) {
         const nPhotos = photos.filter((p) => p.roomId === room.id).length;
         return h('div', { class: 'card room-card' },
           h('a', { class: 'room-main', href: `#/visit/${visit.id}/room/${room.id}` },
-            h('div', { class: 'card-title' }, `${i + 1}. ${roomTitle(visit, room, i)}`),
+            h('div', { class: 'card-title' }, `${i + 1}. ${roomTitle(visit, room, i)}`,
+              roomCount(room) > 1 && h('span', { class: 'badge ok times' }, `× ${roomCount(room)}`)),
             h('div', { class: 'meta' },
               type && room.name && room.values[type.id] && h('span', {}, room.values[type.id]),
               area && h('span', {}, formatValue(area, room.values[area.id]) || 'Yta saknas'),

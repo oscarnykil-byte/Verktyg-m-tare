@@ -408,3 +408,13 @@ input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible
 @media (prefers-reduced-motion: reduce) {
   #toast { transition: none; }
 }
+
+/* ---------- Tillägg ---------- */
+
+.stack { display: flex; flex-direction: column; gap: 14px; }
+
+.stack:empty { display: none; }
+
+.times { margin-left: 8px; white-space: nowrap; }
+
+.check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
