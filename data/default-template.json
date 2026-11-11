@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "name": "Standardmall lokalvård",
+  "updated": "2026-11-11T12:00:00.000Z",
+  "objectTypes": [
+    { "id": "kontor", "label": "Kontor" },
+    { "id": "skola", "label": "Skola / förskola" },
+    { "id": "vard", "label": "Vårdlokal" },
+    { "id": "butik", "label": "Butik / handel" },
+    { "id": "industri", "label": "Industri / lager" },
+    { "id": "trapphus", "label": "Trapphus / fastighet" },
+    { "id": "annat", "label": "Annat" }
+  ],
+  "objectFields": [
+    { "id": "kontaktperson", "label": "Kontaktperson", "type": "text", "section": "Kontakt" },
+    { "id": "kontaktuppgift", "label": "Telefon / e-post", "type": "text", "section": "Kontakt" },
+    { "id": "nuvarande_leverantor", "label": "Nuvarande leverantör", "type": "text", "section": "Kontakt" },
+
+    { "id": "uppgiven_yta", "label": "Total yta enligt kund", "type": "number", "unit": "m²", "section": "Objektet", "help": "Referensmått att jämföra den uppmätta ytan mot." },
+    { "id": "vaningsplan", "label": "Antal våningsplan", "type": "counter", "section": "Objektet" },
+    { "id": "hiss", "label": "Hiss finns", "type": "yesno", "section": "Objektet" },
+    { "id": "antal_personer", "label": "Antal personer i lokalerna", "type": "number", "unit": "st", "section": "Objektet" },
+    { "id": "antal_elever", "label": "Antal elever / barn", "type": "number", "unit": "st", "section": "Objektet", "objectTypes": ["skola"] },
+    { "id": "hygienkrav", "label": "Särskilda hygienkrav (t.ex. smittstädning)", "type": "yesno", "section": "Objektet", "objectTypes": ["vard"] },
+
+    { "id": "stadfrekvens", "label": "Städfrekvens", "type": "choice", "required": true, "section": "Uppdraget",
+      "options": ["5 dagar/vecka", "3 dagar/vecka", "2 dagar/vecka", "1 dag/vecka", "Varannan vecka", "Annat"] },
+    { "id": "stadtid", "label": "Önskad städtid", "type": "multi", "section": "Uppdraget",
+      "options": ["Morgon", "Dagtid", "Kväll", "Natt", "Helg"] },
+    { "id": "forbrukning", "label": "Förbrukningsmaterial ska ingå", "type": "yesno", "section": "Uppdraget" },
+    { "id": "avfall", "label": "Avfallsfraktioner", "type": "multi", "section": "Uppdraget",
+      "options": ["Restavfall", "Papper", "Plast", "Matavfall", "Sekretess"] },
+
+    { "id": "tilltrade", "label": "Tillträde", "type": "multi", "section": "Praktiskt",
+      "options": ["Nyckel", "Tagg / kort", "Kod", "Larm", "Bemannad reception"] },
+    { "id": "stadforrad", "label": "Städförråd finns", "type": "yesno", "section": "Praktiskt" },
+    { "id": "vatten", "label": "Vatten och utslagsvask finns", "type": "yesno", "section": "Praktiskt" },
+    { "id": "sarskilda_krav", "label": "Särskilda krav eller önskemål", "type": "note", "section": "Praktiskt" }
+  ],
+  "roomFields": [
+    { "id": "vaning", "label": "Våning / plan", "type": "text", "section": "Grunduppgifter" },
+    { "id": "lokaltyp", "label": "Lokaltyp", "type": "choice", "role": "roomType", "required": true, "breakdown": true, "section": "Grunduppgifter",
+      "options": ["Kontor", "Kontorslandskap", "Konferensrum", "Korridor", "Entré", "Trapphus", "Hiss", "Pentry / kök", "Matsal", "WC", "RWC", "Dusch / omklädning", "Städförråd", "Förråd", "Klassrum", "Vårdrum", "Lager / produktion", "Annat"] },
+    { "id": "yta", "label": "Yta", "type": "area", "role": "area", "required": true, "section": "Grunduppgifter" },
+    { "id": "golvtyp", "label": "Golvtyp", "type": "choice", "role": "floorType", "required": true, "breakdown": true, "section": "Grunduppgifter",
+      "options": ["Linoleum", "Plast / vinyl", "Klinker", "Sten", "Trä / parkett", "Laminat", "Heltäckningsmatta", "Betong / epoxi", "Gummi", "Annat"] },
+    { "id": "moblering", "label": "Möbleringsgrad", "type": "choice", "section": "Grunduppgifter",
+      "options": ["Låg", "Medel", "Hög"] },
+    { "id": "avvikande_frekvens", "label": "Städfrekvens om den avviker", "type": "text", "section": "Grunduppgifter" },
+
+    { "id": "toaletter", "label": "Toaletter", "type": "counter", "sum": true, "section": "Sanitet" },
+    { "id": "urinoarer", "label": "Urinoarer", "type": "counter", "sum": true, "section": "Sanitet" },
+    { "id": "tvattstall", "label": "Tvättställ", "type": "counter", "sum": true, "section": "Sanitet" },
+    { "id": "duschar", "label": "Duschar", "type": "counter", "sum": true, "section": "Sanitet" },
+    { "id": "hallare", "label": "Hållare för papper / tvål", "type": "counter", "sum": true, "section": "Sanitet" },
+
+    { "id": "fonster", "label": "Fönster", "type": "group", "section": "Fönster och glas",
+      "subfields": [
+        { "id": "typ", "label": "Typ", "type": "choice",
+          "options": ["1-luft", "2-luft", "3-luft", "Glasparti / skyltfönster", "Glasdörr", "Invändigt glasparti", "Takfönster"] },
+        { "id": "antal", "label": "Antal", "type": "counter" },
+        { "id": "sidor", "label": "Sidor som putsas", "type": "choice",
+          "options": ["Utsida", "Insida", "Båda sidor", "4 sidor (kopplade)"] },
+        { "id": "stege", "label": "Kräver stege / lift", "type": "yesno" }
+      ] },
+    { "id": "speglar", "label": "Speglar", "type": "counter", "sum": true, "section": "Fönster och glas" },
+
+    { "id": "papperskorgar", "label": "Papperskorgar", "type": "counter", "sum": true, "section": "Övrigt" }
+  ]
+}
