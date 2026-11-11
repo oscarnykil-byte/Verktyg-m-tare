@@ -211,6 +211,7 @@ function fieldDialog(original, scope, template) {
     types.map((t) => h('option', { value: t, selected: t === f.type }, FIELD_TYPES[t])));
   const section = h('input', { type: 'text', value: f.section || '', placeholder: 't.ex. Sanitet' });
   const help = h('input', { type: 'text', value: f.help || '' });
+  const keywords = h('input', { type: 'text', value: f.keywords || '', placeholder: 't.ex. toa, wc-stol' });
   const unit = h('input', { type: 'text', value: f.unit || '', placeholder: 't.ex. m, st, m²' });
   const options = h('textarea', { rows: 6, value: (f.options || []).join('\n') });
   const check = (key, text) => h('label', { class: 'check' },
@@ -334,6 +335,8 @@ function fieldDialog(original, scope, template) {
       scope !== 'sub' && row('Hjälptext', help),
       typeChecks,
       roomTypeChecks,
+      scope === 'room' && row('Nyckelord för snabbinmatning', keywords,
+        'Ord som säljarna använder för den här frågan, åtskilda med komma. Rubriken känns alltid igen.'),
     ],
     onOk: () => {
       const out = { id: f.id, label: label.value.trim(), type: f.type };
@@ -358,6 +361,7 @@ function fieldDialog(original, scope, template) {
       if (scope === 'room' && out.type === 'choice' && f.breakdown) out.breakdown = true;
       if (scope === 'room' && !f.role && f.roomTypes?.length) out.roomTypes = f.roomTypes;
       if (scope === 'room' && out.type !== 'group' && f.inherit) out.inherit = true;
+      if (scope === 'room' && keywords.value.trim()) out.keywords = keywords.value.trim();
       if (f.role === 'roomType' && f.defaults) {
         out.defaults = Object.fromEntries(Object.entries(f.defaults).filter(([t]) => out.options.includes(t)));
       }

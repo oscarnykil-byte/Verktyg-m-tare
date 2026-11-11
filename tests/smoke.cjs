@@ -46,6 +46,45 @@ const step = (name) => console.log('✓ ' + name);
   };
 
   await page.goto(url);
+
+  // Snabbinmatningens tolk: fraser och vad de ska ge.
+  const parse = (phrases, extra) => page.evaluate(async ([list, add]) => {
+    const { parseRoomText } = await import('./js/quick.js');
+    const t = await (await fetch('data/default-template.json')).json();
+    const fields = t.roomFields.map((f) => ({ ...f, ...(add[f.id] || {}) }));
+    return list.map((ph) => {
+      const r = parseRoomText(ph, fields);
+      const flat = { ...r.values, rest: r.rest };
+      if (r.values.yta) flat.yta = r.values.yta.a;
+      if (r.count) flat.count = r.count;
+      for (const [id, rows] of Object.entries(r.rows)) flat[id] = rows.map(({ _id, ...row }) => row);
+      return flat;
+    });
+  }, [phrases, extra || {}]);
+  const cases = {
+    'WC, fyra kvadrat, klinker, två toaletter, ett tvättställ':
+      { lokaltyp: 'WC', yta: 4, golvtyp: 'Klinker', toaletter: 2, tvattstall: 1, rest: '' },
+    'kontorslandskap 8 gånger 7,5 linoleum plan 2 tre fönster':
+      { lokaltyp: 'Kontorslandskap', yta: 60, golvtyp: 'Linoleum', vaning: 'Plan 2', fonster: [{ antal: 3 }], rest: '' },
+    'kontor 12 kvm parkettgolv fem likadana möblering hög':
+      { lokaltyp: 'Kontor', yta: 12, golvtyp: 'Trä / parkett', moblering: 'Hög', count: 5, rest: '' },
+    'dusch 6 kvm klinker två duschar':
+      { lokaltyp: 'Dusch / omklädning', yta: 6, golvtyp: 'Klinker', duschar: 2, rest: '' },
+    'konferensrummet på våning 3 har heltäckningsmatta och 22,5 m2 samt 4 papperskorgar':
+      { lokaltyp: 'Konferensrum', yta: 22.5, golvtyp: 'Heltäckningsmatta', vaning: 'Våning 3', papperskorgar: 4, rest: '' },
+    'toa 1 handfat 1 wc 2 kvadrat plastgolv':
+      { lokaltyp: 'WC', yta: 2, golvtyp: 'Plast / vinyl', toaletter: 1, tvattstall: 1, rest: '' },
+    'lager 300 kvadratmeter betong hög takhöjd':
+      { lokaltyp: 'Lager / produktion', yta: 300, golvtyp: 'Betong / epoxi', rest: 'hög takhöjd' },
+    'det var fint väder': { rest: 'var fint väder' },
+  };
+  const parsed = await parse(Object.keys(cases));
+  Object.entries(cases).forEach(([phrase, want], i) => assert.deepEqual(parsed[i], want, phrase));
+  // Egna nyckelord från mallen känns igen.
+  assert.deepEqual((await parse(['3 skräpkorgar'], { papperskorgar: { keywords: 'skräpkorg' } }))[0],
+    { papperskorgar: 3, rest: '' });
+  step('snabbinmatningens tolk');
+
   await page.getByRole('button', { name: '+ Nytt besök' }).click();
   await page.locator('dialog input[type=text]').fill('Testkund AB');
   await page.locator('dialog select').selectOption('skola');
@@ -118,7 +157,32 @@ const step = (name) => console.log('✓ ' + name);
   // Rum 3: saknar obligatoriska uppgifter.
   await nextRoom();
   await page.locator('#main input[type=text]').first().fill('Rum 3');
+  // Snabbinmatning: fyller i, visar vad som tolkades och kan ångras.
+  await page.getByLabel('Snabbinmatning').fill('WC 3 kvadrat två toaletter fem likadana gul dörr 4 papperskorgar');
+  await page.getByRole('button', { name: 'Fyll i' }).click();
+  assert.equal(await field('lokaltyp').locator('select').inputValue(), 'WC');
+  assert.equal(await field('yta').getByLabel('Yta').inputValue(), '3');
+  assert.equal(await field('toaletter').locator('input').inputValue(), '2');
+  assert.equal(await field('tvattstall').locator('input').inputValue(), '1', 'förvalet för WC gäller');
+  assert.equal(await field('_count').locator('input').inputValue(), '5');
+  assert.match(await page.locator('.quick-result').innerText(), /Tolkades inte: gul dörr/);
+  await page.getByRole('button', { name: 'Lägg i anteckningar' }).click();
+  assert.equal(await page.getByLabel('Anteckningar').inputValue(), 'gul dörr');
+  await shot('2b-snabbinmatning');
+  // En fråga som inte gäller lokaltypen fylls inte i.
+  await page.getByLabel('Snabbinmatning').fill('förråd 2 toaletter');
+  await page.getByRole('button', { name: 'Fyll i' }).click();
+  assert.match(await page.locator('.quick-result').innerText(), /gäller Förråd: Toaletter/);
+  await page.getByRole('button', { name: 'Ångra' }).click();
+  assert.equal(await field('lokaltyp').locator('select').inputValue(), 'WC');
+  // Ångra en gång till går inte, så rummet nollställs för hand för resten av testet.
+  await field('lokaltyp').locator('select').selectOption('');
+  await field('golvtyp').locator('select').selectOption('Klinker');
+  await field('yta').getByLabel('Yta').fill('');
+  await field('_count').getByRole('button', { name: 'Minska' }).click({ clickCount: 4 });
+  await page.getByLabel('Anteckningar').fill('');
   await settle();
+  step('snabbinmatning i rumsformuläret');
   await page.getByRole('link', { name: 'Klar' }).click();
   await page.locator('.room-card').nth(2).waitFor();
 
@@ -236,7 +300,7 @@ const step = (name) => console.log('✓ ' + name);
 
   // Offline: ladda om utan nät och skapa ett besök med den nya mallen.
   await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.waitForFunction(() => caches.open('matverktyg-v2').then((c) => c.keys()).then((k) => k.length > 20));
+  await page.waitForFunction(() => caches.open('matverktyg-v3').then((c) => c.keys()).then((k) => k.length > 20));
   await ctx.setOffline(true);
   await page.goto(url + '#/');
   await page.reload();

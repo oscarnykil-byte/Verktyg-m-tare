@@ -10,6 +10,7 @@ Ett verktyg för säljare att samla in underlag vid kundbesök: ytor, golvtyper,
 2. **Objekt**: fyll i uppgifter som gäller hela objektet.
 3. **Rum**: lägg till ett rum i taget. Ange yta direkt i m², eller längd och bredd så räknas ytan ut.
    - Lokaltypen styr vilka frågor som visas, så välj den först. Den fyller också i förval, till exempel klinker och en toalett för WC.
+   - **Snabbinmatning**: räkna upp det du ser i rutan överst, så fylls fälten i. Tryck på mikrofonen på tangentbordet för att diktera. Exempel: *"WC, fyra kvadrat, klinker, två toaletter"* eller *"kontor 4 gånger 3 linoleum plan 2 fem likadana"*. Det som inte tolkas visas och kan läggas i anteckningarna.
    - Våning och golvtyp följer med från föregående rum.
    - Finns flera likadana rum fylls rummet i en gång och antalet anges i *Antal likadana rum*. Rum som nästan är lika kan kopieras.
 4. **Eget fält**: när mallen inte räcker går det att lägga till en egen fråga på objektet eller rummet.
@@ -36,6 +37,7 @@ Under **Mall och frågor** på startsidan ändras frågorna utan kod:
 - Begränsa en rumsfråga till vissa lokaltyper, så att till exempel toaletter bara efterfrågas i WC.
 - Välj vilka svar som ska förifyllas från föregående rum.
 - Ange förval per lokaltyp: öppna frågan *Lokaltyp* och tryck på en lokaltyp.
+- Lägg till nyckelord för snabbinmatningen på en fråga, så att den känner igen de ord säljarna använder (till exempel *toa* för Toaletter).
 
 Ändringar gäller nya besök. Påbörjade besök behåller mallen de skapades med, men kan bytas till den senaste mallen från summeringen.
 
@@ -57,6 +59,7 @@ Ren HTML, CSS och JavaScript utan byggsteg. Mappen kan läggas på vilket webbho
 | `js/db.js` | Lagring på enheten (IndexedDB) |
 | `js/template.js` | Mallhantering och kontroll av inlästa mallar |
 | `js/fields.js` | Fälttyperna i formulären |
+| `js/quick.js` | Snabbinmatning: tolkar en dikterad eller skriven rad till svar |
 | `js/summary.js` | Nyckeltal och kontroll av obligatoriska uppgifter |
 | `js/export.js` | Excel, PDF och säkerhetskopia |
 | `js/views/` | Skärmarna: start, besök, rum, mallredigerare |

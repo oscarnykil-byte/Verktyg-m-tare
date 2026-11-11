@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "name": "Standardmall lokalvård",
-  "updated": "2026-11-11T18:00:00.000Z",
+  "updated": "2026-11-12T08:00:00.000Z",
   "objectTypes": [
     {
       "id": "kontor",
@@ -281,7 +281,8 @@
         "Vårdrum",
         "Entré",
         "Annat"
-      ]
+      ],
+      "keywords": "möblering, möblerat"
     },
     {
       "id": "avvikande_frekvens",
@@ -300,7 +301,8 @@
         "RWC",
         "Dusch / omklädning",
         "Annat"
-      ]
+      ],
+      "keywords": "toa, toalettstol, wc-stol"
     },
     {
       "id": "urinoarer",
@@ -313,7 +315,8 @@
         "RWC",
         "Dusch / omklädning",
         "Annat"
-      ]
+      ],
+      "keywords": "pissoar"
     },
     {
       "id": "tvattstall",
@@ -330,7 +333,8 @@
         "Vårdrum",
         "Städförråd",
         "Annat"
-      ]
+      ],
+      "keywords": "handfat, tvättfat"
     },
     {
       "id": "duschar",
@@ -357,7 +361,8 @@
         "Pentry / kök",
         "Vårdrum",
         "Annat"
-      ]
+      ],
+      "keywords": "pappershållare, tvålhållare"
     },
     {
       "id": "fonster",
@@ -422,7 +427,8 @@
       "label": "Papperskorgar",
       "type": "counter",
       "sum": true,
-      "section": "Övrigt"
+      "section": "Övrigt",
+      "keywords": "soptunna, sopkorg"
     }
   ]
 }

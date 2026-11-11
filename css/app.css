@@ -418,3 +418,15 @@ input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible
 .times { margin-left: 8px; white-space: nowrap; }
 
 .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+
+.quick-result { display: flex; flex-direction: column; gap: 8px; }
+
+.quick-result:empty { display: none; }
+
+.quick-result p { margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 0.95rem; }
+
+.quick-ok { background: var(--accent-soft); color: #0a4d3c; }
+
+.quick-miss { background: var(--warn-soft); color: #6b4000; }
+
+.quick-result .row > .btn { flex: 0 1 auto; }

@@ -1,5 +1,5 @@
 // Gör att appen fungerar utan internet: alla filer sparas på enheten vid första besöket.
-const CACHE = 'matverktyg-v2';
+const CACHE = 'matverktyg-v3';
 const FILES = [
   './',
   'index.html',
@@ -14,6 +14,7 @@ const FILES = [
   'js/export.js',
   'js/fields.js',
   'js/photos.js',
+  'js/quick.js',
   'js/summary.js',
   'js/template.js',
   'js/util.js',
