@@ -430,3 +430,49 @@ input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible
 .quick-miss { background: var(--warn-soft); color: #6b4000; }
 
 .quick-result .row > .btn { flex: 0 1 auto; }
+
+/* ---------- Flöde under rundvandringen ---------- */
+
+#saved { margin-left: auto; flex: none; font-size: 0.85rem; opacity: 0.9; white-space: nowrap; }
+
+#tabs.actions { gap: 8px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); }
+
+#tabs.actions .btn { flex: 1; min-height: 52px; padding: 8px; }
+
+.room-card { align-items: stretch; }
+
+.room-main { justify-content: center; }
+
+.room-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
+
+.room-actions .btn { align-self: stretch; }
+
+.chips-more { display: block; }
+
+.chip.more { border-style: dashed; color: var(--muted); }
+
+.fold { gap: 0; padding: 0; }
+
+.fold > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 13px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.fold > summary::-webkit-details-marker { display: none; }
+
+.fold > summary::after { content: "+"; margin-left: auto; flex: none; color: var(--accent); font-size: 1.3rem; line-height: 1; font-weight: 600; }
+
+.fold[open] > summary::after { content: "−"; }
+
+.fold-title { font-weight: 600; flex: none; }
+
+.fold-sum { color: var(--muted); font-size: 0.9rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.fold[open] .fold-sum { display: none; }
+
+.fold-body { display: flex; flex-direction: column; gap: 14px; padding: 0 14px 14px; }

@@ -1,7 +1,7 @@
 // Snabbinmatning: tolkar en dikterad eller skriven rad, t.ex.
 // "WC, fyra kvadrat, klinker, två toaletter", till svar på rummets frågor.
 // Tolkningen är regelbaserad och görs på enheten, så den fungerar offline och följer mallen.
-import { formatValue } from './template.js';
+import { applyTypeDefaults, byRole, fieldsFor, formatValue, roomTemplateFields } from './template.js';
 import { round, uid } from './util.js';
 
 const NUMBER_WORDS = ['noll', 'en', 'två', 'tre', 'fyra', 'fem', 'sex', 'sju', 'åtta', 'nio', 'tio', 'elva', 'tolv',
@@ -219,4 +219,45 @@ export function describeParsed(parsed, fields) {
   }
   if (parsed.count) items.push(`Antal likadana rum: ${parsed.count}`);
   return items;
+}
+
+/**
+ * Tolkar texten och fyller i rummet. Lokaltypen sätts först, eftersom den avgör förvalen
+ * och vilka frågor som gäller. Det säljaren sa går före förval.
+ * @returns understood: vad som fylldes i, hidden: frågor som nämndes men inte gäller lokaltypen,
+ *          rest: text som inte gick att tolka, typeName: rummets lokaltyp
+ */
+export function applyQuickText(visit, room, text) {
+  const template = visit.template;
+  const all = fieldsFor(template.roomFields, visit.objectTypeId);
+  const parsed = parseRoomText(text, all);
+  room.auto ||= {};
+
+  const typeField = byRole(template, 'roomType');
+  if (typeField && typeField.id in parsed.values) {
+    room.values[typeField.id] = parsed.values[typeField.id];
+    applyTypeDefaults(template, room);
+  }
+  const shown = new Set(roomTemplateFields(visit, room).map((f) => f.id));
+  const hidden = [];
+  for (const f of all) {
+    if (!(f.id in parsed.values) && !(f.id in parsed.rows)) continue;
+    if (!shown.has(f.id)) {
+      hidden.push(f.label);
+      delete parsed.values[f.id];
+      delete parsed.rows[f.id];
+    } else if (f.id in parsed.rows) {
+      room.values[f.id] = [...(room.values[f.id] || []), ...parsed.rows[f.id]];
+    } else {
+      room.values[f.id] = parsed.values[f.id];
+      delete room.auto[f.id];
+    }
+  }
+  if (parsed.count) room.count = parsed.count;
+  return {
+    understood: describeParsed(parsed, all),
+    hidden,
+    rest: parsed.rest,
+    typeName: (typeField && room.values[typeField.id]) || 'rummet',
+  };
 }

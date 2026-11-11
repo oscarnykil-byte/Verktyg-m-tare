@@ -22,6 +22,32 @@ async function toDataUrl(file) {
   }
 }
 
+/** Skalar ned och sparar valda bilder på ett rum (eller på besöket om roomId saknas). */
+export async function addPhotos(files, visitId, roomId, photos) {
+  for (const file of files) {
+    try {
+      const photo = { id: uid(), visitId, roomId: roomId || null, created: Date.now(), data: await toDataUrl(file) };
+      await putPhoto(photo);
+      photos.push(photo);
+    } catch {
+      toast('Fotot kunde inte sparas.');
+    }
+  }
+}
+
+/** Dold filväljare som öppnar kameran direkt. onDone anropas när bilderna är sparade. */
+export function cameraInput(onFiles) {
+  const input = h('input', {
+    type: 'file', accept: 'image/*', capture: 'environment', hidden: true,
+    onchange: async () => {
+      const files = [...input.files];
+      input.value = '';
+      if (files.length) await onFiles(files);
+    },
+  });
+  return input;
+}
+
 /**
  * Fotoruta för ett besök (roomId = null) eller ett rum.
  * @param photos alla foton för besöket (listan uppdateras på plats)
@@ -46,15 +72,7 @@ export function photoSection(visitId, roomId, photos) {
   const input = h('input', {
     type: 'file', accept: 'image/*', multiple: true, hidden: true,
     onchange: async () => {
-      for (const file of input.files) {
-        try {
-          const photo = { id: uid(), visitId, roomId: roomId || null, created: Date.now(), data: await toDataUrl(file) };
-          await putPhoto(photo);
-          photos.push(photo);
-        } catch {
-          toast('Fotot kunde inte sparas.');
-        }
-      }
+      await addPhotos([...input.files], visitId, roomId, photos);
       input.value = '';
       draw();
     },

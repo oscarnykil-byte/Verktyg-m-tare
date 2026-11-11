@@ -17,8 +17,20 @@ const app = {
   setHeader({ title, back }) {
     bar.replaceChildren(
       back ? h('a', { class: 'back', href: back, 'aria-label': 'Tillbaka' }, '‹') : h('span', { class: 'back-spacer' }),
-      h('h1', { id: 'title' }, title));
+      h('h1', { id: 'title' }, title),
+      h('span', { id: 'saved', role: 'status' }));
     document.title = title;
+  },
+  /** Visar i sidhuvudet om ändringar håller på att sparas ('saving') eller är sparade ('saved'). */
+  setSaved(state) {
+    const el = document.getElementById('saved');
+    if (el) el.textContent = state === 'saving' ? 'Sparar …' : state === 'saved' ? 'Sparat ✓' : '';
+  },
+  /** Fast rad med knappar längst ned, på samma plats som flikarna. */
+  setActions(nodes) {
+    tabs.hidden = false;
+    tabs.className = 'actions';
+    tabs.replaceChildren(...nodes);
   },
   setTitle(title) {
     const el = document.getElementById('title');
@@ -26,6 +38,7 @@ const app = {
   },
   setTabs(items) {
     tabs.hidden = false;
+    tabs.className = '';
     tabs.replaceChildren(...items.map((t) =>
       h('a', { class: 'tab' + (t.active ? ' active' : ''), href: t.href, 'aria-current': t.active ? 'page' : null }, t.label)));
   },

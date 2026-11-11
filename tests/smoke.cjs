@@ -38,9 +38,17 @@ const step = (name) => console.log('✓ ' + name);
   const shot = async (name) => SHOTS && page.screenshot({ path: path.join(SHOTS, name + '.png'), fullPage: true });
   const field = (id) => page.locator(`[data-field="${id}"]`);
   const settle = () => page.waitForTimeout(600); // autosparning
+  const openAll = () => page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
+  // Envalsfrågor är knappar. Alternativ som inte syns ligger bakom "Fler".
+  const picked = async (id) => ((await field(id).locator('.chip.on').count()) ? field(id).locator('.chip.on').innerText() : '');
+  const pick = async (id, option) => {
+    const btn = field(id).getByRole('button', { name: option, exact: true });
+    if (!(await btn.count())) await field(id).getByRole('button', { name: 'Fler …' }).click();
+    await btn.click();
+  };
   const nextRoom = async () => {
     const before = page.url();
-    await page.getByRole('button', { name: 'Spara och nytt rum' }).click();
+    await page.getByRole('button', { name: 'Nytt rum', exact: true }).click();
     await page.waitForURL((u) => u.href !== before);
     await field('lokaltyp').waitFor();
   };
@@ -92,9 +100,17 @@ const step = (name) => console.log('✓ ' + name);
   await page.waitForURL(/#\/visit\//);
   step('nytt besök skapat');
 
+  // Besöket öppnas på rumslistan: rundvandringen kommer först.
+  await page.locator('.tab.active', { hasText: 'Rum' }).waitFor();
+
   // Objektfrågor: frågan för skola visas, vårdfrågan visas inte.
-  await assert.doesNotReject(field('antal_elever').waitFor());
+  await page.getByRole('link', { name: 'Objekt' }).click();
+  await field('antal_elever').waitFor({ state: 'attached' });
   assert.equal(await field('hygienkrav').count(), 0);
+  // Sektioner utan obligatoriska frågor är hopfällda, den med Städfrekvens är öppen.
+  assert.equal(await field('antal_elever').isVisible(), false);
+  assert.equal(await field('stadfrekvens').isVisible(), true);
+  await openAll();
   await field('antal_elever').locator('input').fill('240');
   await field('uppgiven_yta').locator('input').fill('1250,5');
   await field('stadtid').getByRole('button', { name: 'Kväll' }).click();
@@ -102,22 +118,42 @@ const step = (name) => console.log('✓ ' + name);
   await page.locator('dialog input[type=text]').fill('Portkod');
   await page.getByRole('button', { name: 'Lägg till', exact: true }).click();
   await page.locator('.custom-field input').fill('1234');
-  await settle();
+  await page.locator('#saved', { hasText: 'Sparat' }).waitFor();
+  const objektet = page.locator('details', { has: page.locator('.fold-title', { hasText: /^Objektet$/ }) });
+  assert.match(await objektet.locator('.fold-sum').textContent(), /Antal elever \/ barn 240 st/);
   await shot('1-objekt');
-  step('objektfrågor och eget fält');
+  step('objektfrågor, hopfällda sektioner och eget fält');
 
-  // Rum 1: klassrum 8 × 7,5 m, linoleum, två fönsterrader.
-  await page.getByRole('link', { name: 'Vidare till rummen' }).click();
-  await page.getByRole('button', { name: '+ Lägg till rum' }).click();
-  await page.waitForURL(/\/room\//);
-  await field('lokaltyp').locator('select').selectOption('Klassrum');
+  // Rum 1 skapas från rumslistan utan sidbyte: klassrum 8 × 7,5 m, linoleum.
+  await page.getByRole('link', { name: /^Rum/ }).click();
+  const quick = page.getByLabel('Snabbinmatning');
+  const addRoom = page.getByRole('button', { name: 'Lägg till rum', exact: true });
+  await quick.fill('klassrum 8 gånger 7,5 linoleum plan 2');
+  await addRoom.click();
+  await page.locator('.room-card').first().waitFor();
+  assert.match(page.url(), /\/rum$/, 'ska stanna kvar på rumslistan');
+  assert.match(await page.locator('.room-card').first().innerText(), /1\. Klassrum[\s\S]*60 m²[\s\S]*Linoleum/);
+  assert.match(await page.locator('.quick-result').innerText(), /Rum 1 tillagt/);
+  assert.match(await page.locator('.tab.active').innerText(), /Rum \(1\)/);
+  assert.equal(await quick.inputValue(), '');
+  // Foto direkt från raden.
+  const fileVia = async (button) => {
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), button.click()]);
+    await chooser.setFiles(path.join(ROOT, 'icons/icon-192.png'));
+  };
+  await fileVia(page.locator('.room-card').first().getByRole('button', { name: 'Foto' }));
+  await page.locator('.room-card', { hasText: '1 foto' }).waitFor();
+  step('rum skapat och fotat från rumslistan');
+
+  // Detaljer i rum 1: två fönsterrader.
+  await page.locator('.room-main').first().click();
+  await field('lokaltyp').waitFor();
+  assert.equal(await picked('lokaltyp'), 'Klassrum');
   assert.equal(await field('toaletter').count(), 0, 'toaletter ska inte visas för klassrum');
   assert.equal(await field('tvattstall').count(), 1);
-  await field('vaning').locator('input').fill('Plan 2');
-  await field('yta').getByLabel('Längd').fill('8');
-  await field('yta').getByLabel('Bredd').fill('7,5');
   assert.equal(await field('yta').getByLabel('Yta').inputValue(), '60');
-  await field('golvtyp').locator('select').selectOption('Linoleum');
+  assert.equal(await field('tvattstall').isVisible(), false, 'Sanitet ska vara hopfälld');
+  await openAll();
   await page.getByRole('button', { name: '+ Lägg till fönster' }).click();
   const w1 = page.locator('.group-row').nth(0);
   await w1.getByRole('button', { name: '2-luft' }).click();
@@ -126,30 +162,35 @@ const step = (name) => console.log('✓ ' + name);
   const w2 = page.locator('.group-row').nth(1);
   await w2.getByRole('button', { name: 'Glasdörr' }).click();
   await w2.getByRole('button', { name: 'Öka' }).click();
-  await page.locator('input[type=file]').setInputFiles(path.join(ROOT, 'icons/icon-192.png'));
-  await page.locator('.photo img').waitFor();
+  const glas = page.locator('details', { has: page.locator('.fold-title', { hasText: 'Fönster och glas' }) });
+  assert.match(await glas.locator('.fold-sum').textContent(), /Fönster 5/);
+  assert.equal(await page.locator('.photo img').count(), 1);
   await settle();
   await shot('2-rum');
-  step('rum 1 med fönster och foto');
+  step('rum 1 med fönster');
 
-  // Rum 2: WC 4 m² direkt, klinker, 2 toaletter.
+  // Rum 2 via den fasta raden: WC 4 m², klinker, 2 toaletter.
   await nextRoom();
   // Våning och golvtyp följer med från föregående rum, och lokaltypens förval fylls i.
   assert.equal(await field('vaning').locator('input').inputValue(), 'Plan 2');
-  assert.equal(await field('golvtyp').locator('select').inputValue(), 'Linoleum');
+  assert.equal(await picked('golvtyp'), 'Linoleum');
   assert.equal(await field('toaletter').count(), 0);
-  await field('lokaltyp').locator('select').selectOption('WC');
-  assert.equal(await field('golvtyp').locator('select').inputValue(), 'Klinker');
+  // Mest använda lokaltypen står först, resten nås via Fler.
+  assert.equal(await field('lokaltyp').locator('.chip').first().innerText(), 'Klassrum');
+  assert.equal(await field('lokaltyp').getByRole('button', { name: 'WC', exact: true }).count(), 0);
+  await pick('lokaltyp', 'WC');
+  assert.equal(await picked('golvtyp'), 'Klinker');
   assert.equal(await field('toaletter').locator('input').inputValue(), '1');
   assert.equal(await field('tvattstall').locator('input').inputValue(), '1');
   // Byte av lokaltyp tar bort förvalen igen, och eget svar skrivs inte över.
-  await field('lokaltyp').locator('select').selectOption('Förråd');
-  assert.equal(await field('golvtyp').locator('select').inputValue(), '');
-  await field('golvtyp').locator('select').selectOption('Sten');
-  await field('lokaltyp').locator('select').selectOption('WC');
-  assert.equal(await field('golvtyp').locator('select').inputValue(), 'Sten');
-  await field('golvtyp').locator('select').selectOption('Klinker');
+  await pick('lokaltyp', 'Förråd');
+  assert.equal(await picked('golvtyp'), '');
+  await pick('golvtyp', 'Sten');
+  await pick('lokaltyp', 'WC');
+  assert.equal(await picked('golvtyp'), 'Sten');
+  await pick('golvtyp', 'Klinker');
   await field('yta').getByLabel('Yta').fill('4');
+  await openAll();
   await field('toaletter').getByRole('button', { name: 'Öka' }).click();
   await settle();
   step('förval från föregående rum och lokaltyp');
@@ -157,10 +198,10 @@ const step = (name) => console.log('✓ ' + name);
   // Rum 3: saknar obligatoriska uppgifter.
   await nextRoom();
   await page.locator('#main input[type=text]').first().fill('Rum 3');
-  // Snabbinmatning: fyller i, visar vad som tolkades och kan ångras.
+  // Snabbinmatning på rumssidan: fyller i, visar vad som tolkades och kan ångras.
   await page.getByLabel('Snabbinmatning').fill('WC 3 kvadrat två toaletter fem likadana gul dörr 4 papperskorgar');
   await page.getByRole('button', { name: 'Fyll i' }).click();
-  assert.equal(await field('lokaltyp').locator('select').inputValue(), 'WC');
+  assert.equal(await picked('lokaltyp'), 'WC');
   assert.equal(await field('yta').getByLabel('Yta').inputValue(), '3');
   assert.equal(await field('toaletter').locator('input').inputValue(), '2');
   assert.equal(await field('tvattstall').locator('input').inputValue(), '1', 'förvalet för WC gäller');
@@ -175,10 +216,11 @@ const step = (name) => console.log('✓ ' + name);
   await page.getByRole('button', { name: 'Fyll i' }).click();
   assert.match(await page.locator('.quick-result').innerText(), /gäller Förråd: Toaletter/);
   await page.getByRole('button', { name: 'Ångra' }).click();
-  assert.equal(await field('lokaltyp').locator('select').inputValue(), 'WC');
-  // Ångra en gång till går inte, så rummet nollställs för hand för resten av testet.
-  await field('lokaltyp').locator('select').selectOption('');
-  await field('golvtyp').locator('select').selectOption('Klinker');
+  assert.equal(await picked('lokaltyp'), 'WC');
+  // Rummet nollställs för hand för resten av testet: lokaltyp och yta ska saknas.
+  await field('lokaltyp').locator('.chip.on').click();
+  assert.equal(await picked('lokaltyp'), '');
+  await pick('golvtyp', 'Klinker');
   await field('yta').getByLabel('Yta').fill('');
   await field('_count').getByRole('button', { name: 'Minska' }).click({ clickCount: 4 });
   await page.getByLabel('Anteckningar').fill('');
@@ -187,7 +229,26 @@ const step = (name) => console.log('✓ ' + name);
   await page.getByRole('link', { name: 'Klar' }).click();
   await page.locator('.room-card').nth(2).waitFor();
 
-  // Kopiera WC:t, så finns två likadana.
+  // Rumslistan: det otolkade hamnar i anteckningarna, och Ångra tar bort rummet igen.
+  await quick.fill('kontor 10 kvm blå vägg');
+  await addRoom.click();
+  await page.locator('.room-card').nth(3).waitFor();
+  assert.match(await page.locator('.quick-result').innerText(), /Lagt i anteckningarna: blå vägg/);
+  await page.locator('.quick-result').getByRole('button', { name: 'Ångra' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.room-card').length === 3);
+  assert.equal(await quick.inputValue(), 'kontor 10 kvm blå vägg');
+  await quick.fill('');
+  // Foto + nytt rum: rummet skapas när bilden är tagen. Tas sedan bort igen.
+  await fileVia(page.getByRole('button', { name: 'Foto + nytt rum' }));
+  await page.locator('.room-card').nth(3).waitFor();
+  assert.match(await page.locator('.room-card').nth(3).innerText(), /1 foto/);
+  await page.locator('.room-main').nth(3).click();
+  await page.getByRole('button', { name: 'Ta bort rummet' }).click();
+  await page.locator('.room-card').nth(2).waitFor();
+  assert.equal(await page.locator('.room-card').count(), 3);
+  step('ångra och foto först i rumslistan');
+
+  // Kopiera WC:t och låt kopian stå för tre likadana rum.
   await page.locator('.room-card').nth(1).getByRole('button', { name: 'Kopiera' }).click();
   await page.waitForURL(/\/room\//);
   assert.equal(await field('yta').getByLabel('Yta').inputValue(), '4');
@@ -301,7 +362,7 @@ const step = (name) => console.log('✓ ' + name);
 
   // Offline: ladda om utan nät och skapa ett besök med den nya mallen.
   await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.waitForFunction(() => caches.open('matverktyg-v3').then((c) => c.keys()).then((k) => k.length > 20));
+  await page.waitForFunction(() => caches.open('matverktyg-v4').then((c) => c.keys()).then((k) => k.length > 20));
   await ctx.setOffline(true);
   await page.goto(url + '#/');
   await page.reload();
@@ -309,11 +370,10 @@ const step = (name) => console.log('✓ ' + name);
   await page.locator('dialog input[type=text]').fill('Offlinekund');
   await page.locator('dialog select').selectOption('kontor');
   await page.getByRole('button', { name: 'Starta' }).click();
-  await page.getByRole('link', { name: /^Rum/ }).click();
-  await page.getByRole('button', { name: '+ Lägg till rum' }).click();
+  await page.getByRole('button', { name: 'Lägg till rum', exact: true }).click();
   await field('lokaltyp').waitFor();
   assert.equal(await page.getByText('Antal whiteboards').count(), 0);
-  await field('lokaltyp').locator('select').selectOption('Klassrum');
+  await pick('lokaltyp', 'Klassrum');
   assert.equal(await page.locator('[data-field]', { hasText: 'Antal whiteboards' }).locator('input').inputValue(), '1');
   await settle();
   await page.getByRole('link', { name: 'Klar' }).click();

@@ -1,11 +1,11 @@
 // Formuläret för ett rum.
-import { deletePhoto, getVisit, photosForVisit, putVisit } from '../db.js';
-import { photoSection } from '../photos.js';
+import { deletePhoto, getVisit, photosForVisit } from '../db.js';
 import { renderField } from '../fields.js';
-import { describeParsed, parseRoomText } from '../quick.js';
-import { applyTypeDefaults, byRole, createRoom, fieldsFor, roomTemplateFields, roomTitle } from '../template.js';
-import { append, debounce, h, uid } from '../util.js';
-import { customFieldsCard, fieldCards, notesCard } from './common.js';
+import { addPhotos, cameraInput, photoSection } from '../photos.js';
+import { applyQuickText } from '../quick.js';
+import { applyTypeDefaults, createRoom, roomTemplateFields, roomTitle } from '../template.js';
+import { append, h, uid } from '../util.js';
+import { autosaver, customFieldsCard, fieldCards, notesCard, recentOptions } from './common.js';
 
 export async function roomView(app, { id, roomId }) {
   const visit = await getVisit(id);
@@ -16,27 +16,21 @@ export async function roomView(app, { id, roomId }) {
   const roomsHref = `#/visit/${id}/rum`;
 
   const title = () => `${index + 1}. ${roomTitle(visit, room, index)}`;
-  const save = debounce(async () => {
-    visit.updated = Date.now();
-    await putVisit(visit);
-    app.setTitle(title());
-  }, 400);
-  app.onLeave = () => save.flush();
   app.setHeader({ title: title(), back: roomsHref });
+  const save = autosaver(app, visit, () => app.setTitle(title()));
 
   const newRoom = async () => {
-    await save.flush();
-    const next = createRoom(uid(), visit.template, room);
-    visit.rooms.push(next);
-    visit.updated = Date.now();
-    await putVisit(visit);
-    app.go(`#/visit/${id}/room/${next.id}`);
+    visit.rooms.push(createRoom(uid(), visit.template, room));
+    await save.now();
+    app.go(`#/visit/${id}/room/${visit.rooms.at(-1).id}`);
   };
 
   // Frågorna ritas om när lokaltypen ändras, eftersom den styr både vilka frågor som visas och förvalen.
+  const open = new Set(); // utfällda sektioner
   const questions = h('div', { class: 'stack' });
   const drawQuestions = () => questions.replaceChildren(
-    ...fieldCards(roomTemplateFields(visit, room), room.values, fieldChanged));
+    ...fieldCards(roomTemplateFields(visit, room), room.values, fieldChanged,
+      { open, recent: (f) => recentOptions(visit, f) }));
   const fieldChanged = (f) => {
     if (room.auto) delete room.auto[f.id]; // säljarens eget svar ska inte skrivas över av förval
     if (f.role === 'roomType') {
@@ -45,9 +39,8 @@ export async function roomView(app, { id, roomId }) {
     }
     save();
   };
-  drawQuestions();
 
-  // Delar som snabbinmatningen kan ändra ritas i egna behållare så att de går att rita om.
+  // Delar som snabbinmatningen eller kameraknappen kan ändra ritas i egna behållare.
   const countBox = h('div', {});
   const drawCount = () => countBox.replaceChildren(renderField({
     id: '_count', label: 'Antal likadana rum', type: 'counter', min: 1,
@@ -55,9 +48,11 @@ export async function roomView(app, { id, roomId }) {
   }, room.count || 1, (n) => { room.count = n; save(); }));
   const notesBox = h('div', {});
   const drawNotes = () => notesBox.replaceChildren(notesCard(room, save));
+  const photoBox = h('div', {});
+  const drawPhotos = () => photoBox.replaceChildren(photoSection(id, room.id, photos));
   const redraw = () => { drawCount(); drawQuestions(); drawNotes(); };
-  drawCount();
-  drawNotes();
+  redraw();
+  drawPhotos();
 
   app.show(
     quickCard(visit, room, () => { redraw(); save(); }),
@@ -71,25 +66,31 @@ export async function roomView(app, { id, roomId }) {
         })),
       countBox),
     questions,
-    customFieldsCard(room, save),
+    customFieldsCard(room, save, open),
     notesBox,
-    photoSection(id, room.id, photos),
-    h('div', { class: 'row' },
-      h('a', { class: 'btn primary', href: roomsHref }, 'Klar'),
-      h('button', { class: 'btn', onclick: newRoom }, 'Spara och nytt rum')),
+    photoBox,
     h('button', {
       class: 'btn danger',
       onclick: async () => {
         if (!confirm('Ta bort rummet och dess foton?')) return;
-        save.flush();
         for (const p of photos.filter((x) => x.roomId === room.id)) await deletePhoto(p.id);
         visit.rooms.splice(index, 1);
-        visit.updated = Date.now();
-        await putVisit(visit);
-        app.onLeave = null;
+        await save.now();
         app.go(roomsHref);
       },
     }, 'Ta bort rummet'));
+
+  // Fast rad längst ned: det man oftast gör härnäst ska aldrig kräva scrollning.
+  const camera = cameraInput(async (files) => {
+    await addPhotos(files, id, room.id, photos);
+    drawPhotos();
+  });
+  app.setActions([
+    camera,
+    h('button', { class: 'btn', onclick: () => camera.click() }, 'Foto'),
+    h('button', { class: 'btn', onclick: newRoom }, 'Nytt rum'),
+    h('a', { class: 'btn primary', href: roomsHref }, 'Klar'),
+  ]);
 }
 
 /**
@@ -97,73 +98,34 @@ export async function roomView(app, { id, roomId }) {
  * @param changed anropas när rummet har ändrats och ska ritas om och sparas
  */
 function quickCard(visit, room, changed) {
-  const template = visit.template;
   const input = h('textarea', {
     rows: 2, 'aria-label': 'Snabbinmatning',
     placeholder: 't.ex. WC, fyra kvadrat, klinker, två toaletter',
   });
   const result = h('div', { class: 'quick-result' });
-  let before = null; // rummet före senaste ifyllningen, för Ångra
-
-  const restore = () => {
-    Object.assign(room, structuredClone(before));
-    before = null;
-    result.replaceChildren();
-    changed();
-  };
 
   const fill = () => {
     const text = input.value.trim();
     if (!text) return;
-    const all = fieldsFor(template.roomFields, visit.objectTypeId);
-    const parsed = parseRoomText(text, all);
-    before = structuredClone({ values: room.values, auto: room.auto || {}, count: room.count || 1, notes: room.notes || '' });
-    room.auto ||= {};
-
-    // Lokaltypen först: den avgör förvalen och vilka frågor som gäller för rummet.
-    const typeField = byRole(template, 'roomType');
-    if (typeField && typeField.id in parsed.values) {
-      room.values[typeField.id] = parsed.values[typeField.id];
-      applyTypeDefaults(template, room);
-    }
-    const shown = new Set(roomTemplateFields(visit, room).map((f) => f.id));
-    const hidden = [];
-    for (const f of all) {
-      const has = f.id in parsed.values || f.id in parsed.rows;
-      if (!has) continue;
-      if (!shown.has(f.id)) {
-        hidden.push(f.label);
-        delete parsed.values[f.id];
-        delete parsed.rows[f.id];
-      } else if (f.id in parsed.rows) {
-        room.values[f.id] = [...(room.values[f.id] || []), ...parsed.rows[f.id]];
-      } else {
-        room.values[f.id] = parsed.values[f.id];
-        delete room.auto[f.id]; // det säljaren sa går före förval
-      }
-    }
-    if (parsed.count) room.count = parsed.count;
-
-    const understood = describeParsed(parsed, all);
-    const typeName = (typeField && room.values[typeField.id]) || 'rummet';
+    const before = structuredClone({ values: room.values, auto: room.auto || {}, count: room.count || 1, notes: room.notes || '' });
+    const r = applyQuickText(visit, room, text);
     result.replaceChildren();
     append(result, [
-      understood.length
-        ? h('p', { class: 'quick-ok' }, 'Ifyllt: ' + understood.join(' · '))
-        : h('p', { class: 'quick-miss' }, 'Inget gick att tolka. Prova en uppräkning, t.ex. "kontor, 12 kvadrat, linoleum".'),
-      hidden.length > 0 && h('p', { class: 'quick-miss' },
-        `Fylldes inte i eftersom frågan inte gäller ${typeName}: ${hidden.join(', ')}`),
-      parsed.rest && h('p', { class: 'quick-miss' }, `Tolkades inte: ${parsed.rest}`),
+      quickReceipt(r),
       h('div', { class: 'row' },
-        parsed.rest && h('button', {
+        r.rest && h('button', {
           type: 'button', class: 'btn small',
           onclick: (e) => {
-            room.notes = [room.notes, parsed.rest].filter(Boolean).join('\n');
+            room.notes = [room.notes, r.rest].filter(Boolean).join('\n');
             e.target.remove();
             changed();
           },
         }, 'Lägg i anteckningar'),
-        h('button', { type: 'button', class: 'btn small', onclick: restore }, 'Ångra'))]);
+        h('button', {
+          type: 'button', class: 'btn small',
+          onclick: () => { Object.assign(room, before); result.replaceChildren(); changed(); },
+        }, 'Ångra')),
+    ]);
     input.value = '';
     changed();
   };
@@ -174,4 +136,16 @@ function quickCard(visit, room, changed) {
     input,
     h('button', { type: 'button', class: 'btn small', onclick: fill }, 'Fyll i'),
     result);
+}
+
+/** Kvitto på vad snabbinmatningen gjorde. restNote beskriver vad som hände med det otolkade. */
+export function quickReceipt(r, restNote = 'Tolkades inte') {
+  return [
+    r.understood.length
+      ? h('p', { class: 'quick-ok' }, 'Ifyllt: ' + r.understood.join(' · '))
+      : h('p', { class: 'quick-miss' }, 'Inget gick att tolka. Prova en uppräkning, t.ex. "kontor, 12 kvadrat, linoleum".'),
+    r.hidden.length > 0 && h('p', { class: 'quick-miss' },
+      `Fylldes inte i eftersom frågan inte gäller ${r.typeName}: ${r.hidden.join(', ')}`),
+    r.rest && h('p', { class: 'quick-miss' }, `${restNote}: ${r.rest}`),
+  ];
 }

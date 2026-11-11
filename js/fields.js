@@ -8,8 +8,8 @@ const inputText = (n) => (n == null ? '' : String(n).replace('.', ','));
  * @param value    nuvarande värde
  * @param onChange anropas med nytt värde vid varje ändring
  */
-export function renderField(field, value, onChange, { compact = false } = {}) {
-  const control = controls[field.type](field, value, onChange);
+export function renderField(field, value, onChange, { compact = false, recent = null } = {}) {
+  const control = controls[field.type](field, value, onChange, { recent });
   return h('div', { class: `field field-${field.type}${compact ? ' compact' : ''}`, dataset: { field: field.id } },
     h('div', { class: 'field-label' },
       h('span', {}, field.label),
@@ -85,15 +85,27 @@ const controls = {
   yesno: (f, v, onChange) => chips(['Ja', 'Nej'], v == null ? [] : [v ? 'Ja' : 'Nej'], (sel) =>
     onChange(sel.length ? sel[0] === 'Ja' : null), false),
 
-  choice: (f, v, onChange) => {
+  choice: (f, v, onChange, { recent } = {}) => {
     // Okända värden (t.ex. ett alternativ som tagits bort ur mallen) visas ändå.
     const options = v && !f.options.includes(v) ? [...f.options, v] : f.options;
-    if (options.length > 8) {
-      return h('select', { onchange: (e) => onChange(e.target.value || null) },
-        h('option', { value: '' }, 'Välj …'),
-        options.map((o) => h('option', { value: o, selected: o === v }, o)));
-    }
-    return chips(options, v ? [v] : [], (sel) => onChange(sel[0] ?? null), false);
+    if (options.length <= 8) return chips(options, v ? [v] : [], (sel) => onChange(sel[0] ?? null), false);
+    // Många alternativ: visa de mest använda som knappar och resten bakom "Fler".
+    const ordered = [...new Set([...(recent || []).filter((o) => options.includes(o)), ...options])];
+    let current = v || null;
+    let expanded = false;
+    const wrap = h('div', { class: 'chips-more' });
+    const draw = () => {
+      const shown = expanded ? options : [...new Set([...ordered.slice(0, 6), ...(current ? [current] : [])])];
+      const row = chips(shown, current ? [current] : [], (sel) => { current = sel[0] ?? null; onChange(current); }, false);
+      if (!expanded) {
+        row.append(h('button', {
+          type: 'button', class: 'chip more', onclick: () => { expanded = true; draw(); },
+        }, 'Fler …'));
+      }
+      wrap.replaceChildren(row);
+    };
+    draw();
+    return wrap;
   },
 
   multi: (f, v, onChange) => {

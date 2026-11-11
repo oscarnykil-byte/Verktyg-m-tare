@@ -6,16 +6,22 @@ Ett verktyg för säljare att samla in underlag vid kundbesök: ytor, golvtyper,
 
 ## För säljaren
 
-1. **Nytt besök**: ange kund och välj objektstyp. Objektstypen styr vilka frågor som visas.
-2. **Objekt**: fyll i uppgifter som gäller hela objektet.
-3. **Rum**: lägg till ett rum i taget. Ange yta direkt i m², eller längd och bredd så räknas ytan ut.
-   - Lokaltypen styr vilka frågor som visas, så välj den först. Den fyller också i förval, till exempel klinker och en toalett för WC.
-   - **Snabbinmatning**: räkna upp det du ser i rutan överst, så fylls fälten i. Tryck på mikrofonen på tangentbordet för att diktera. Exempel: *"WC, fyra kvadrat, klinker, två toaletter"* eller *"kontor 4 gånger 3 linoleum plan 2 fem likadana"*. Det som inte tolkas visas och kan läggas i anteckningarna.
-   - Våning och golvtyp följer med från föregående rum.
-   - Finns flera likadana rum fylls rummet i en gång och antalet anges i *Antal likadana rum*. Rum som nästan är lika kan kopieras.
-4. **Eget fält**: när mallen inte räcker går det att lägga till en egen fråga på objektet eller rummet.
-5. **Summering**: visar total yta, yta per golvtyp och lokaltyp, antal toaletter, fönster per typ och vilka obligatoriska uppgifter som saknas.
-6. **Exportera**: Excel för kalkylen, PDF med foton som rapport. Filen delas via mobilens delningsmeny, till exempel med mejl.
+1. **Nytt besök**: ange kund och välj objektstyp. Objektstypen styr vilka frågor som visas. Besöket öppnas på fliken **Rum**, så att rundvandringen kan börja direkt.
+2. **Rum**: i rutan *Nytt rum* räknar du upp det du ser och trycker *Lägg till rum*. Rummet hamnar i listan utan att du lämnar sidan.
+   - Tryck på mikrofonen på tangentbordet för att diktera. Exempel: *"WC, fyra kvadrat, klinker, två toaletter"* eller *"kontor 4 gånger 3 linoleum plan 2 fem likadana"*.
+   - Det som inte tolkas läggs i rummets anteckningar. *Ångra* tar bort rummet igen.
+   - *Foto* på en rad tar en bild till det rummet. *Foto + nytt rum* skapar rummet när bilden är tagen, om du vill fota först och fylla i efteråt.
+   - Våning och golvtyp följer med från föregående rum, och lokaltypen fyller i förval, till exempel klinker och en toalett för WC.
+   - Tom ruta och *Lägg till rum* ger ett tomt rum att fylla i för hand.
+3. **Rumssidan**: tryck på ett rum för att komplettera. Lokaltyp och golvtyp är knappar med de mest använda först. Sektioner som Sanitet och Fönster är hopfällda och visar vad som är ifyllt; tryck för att fälla ut. Längst ned finns alltid *Foto*, *Nytt rum* och *Klar*.
+   - Ange yta direkt i m², eller längd och bredd så räknas ytan ut.
+   - Finns flera likadana rum fylls rummet i en gång och antalet anges i *Antal likadana rum*. Rum som nästan är lika kan kopieras från listan.
+4. **Objekt**: uppgifter som gäller hela objektet. De passar bäst vid bordet, före eller efter rundvandringen.
+5. **Eget fält**: när mallen inte räcker går det att lägga till en egen fråga på objektet eller rummet.
+6. **Summering**: visar total yta, yta per golvtyp och lokaltyp, antal toaletter, fönster per typ och vilka obligatoriska uppgifter som saknas.
+7. **Exportera**: Excel för kalkylen, PDF med foton som rapport. Filen delas via mobilens delningsmeny, till exempel med mejl.
+
+Uppe till höger står *Sparat* när det senaste är sparat på enheten.
 
 Uppgifterna finns bara på enheten där de skrevs in. Exportera en **säkerhetskopia** från summeringen om besöket ska flyttas till en annan enhet eller sparas undan.
 

@@ -1,28 +1,29 @@
-// Ett besök, med flikarna Objekt, Rum och Summering.
-import { deleteVisit, getVisit, photosForVisit, putVisit } from '../db.js';
+// Ett besök, med flikarna Rum, Objekt och Summering. Rum kommer först: det är där rundvandringen sker.
+import { deletePhoto, deleteVisit, getVisit, photosForVisit, putVisit } from '../db.js';
 import { exportBackup, exportExcel, exportPdf } from '../export.js';
-import { photoSection } from '../photos.js';
+import { addPhotos, cameraInput, photoSection } from '../photos.js';
+import { applyQuickText } from '../quick.js';
 import { computeSummary, roomMissingCount } from '../summary.js';
 import { byRole, createRoom, fieldsFor, formatValue, getTemplate, roomCount, roomTitle } from '../template.js';
-import { debounce, fmtNum, h, toast, uid } from '../util.js';
-import { customFieldsCard, fieldCards, notesCard } from './common.js';
+import { append, fmtNum, h, toast, uid } from '../util.js';
+import { autosaver, customFieldsCard, fieldCards, notesCard } from './common.js';
+import { quickReceipt } from './room.js';
 
-export async function visitView(app, { id, tab = 'objekt' }) {
+export async function visitView(app, { id, tab = 'rum' }) {
   const visit = await getVisit(id);
   if (!visit) return app.go('#/');
   const photos = await photosForVisit(id);
 
-  const save = debounce(async () => { visit.updated = Date.now(); await putVisit(visit); }, 400);
-  app.onLeave = () => save.flush();
-
   app.setHeader({ title: visit.customer || 'Besök', back: '#/' });
-  app.setTabs([
-    { label: 'Objekt', href: `#/visit/${id}/objekt`, active: tab === 'objekt' },
+  const save = autosaver(app, visit);
+  const drawTabs = () => app.setTabs([
     { label: `Rum (${visit.rooms.length})`, href: `#/visit/${id}/rum`, active: tab === 'rum' },
+    { label: 'Objekt', href: `#/visit/${id}/objekt`, active: tab === 'objekt' },
     { label: 'Summering', href: `#/visit/${id}/summering`, active: tab === 'summering' },
   ]);
+  drawTabs();
 
-  if (tab === 'rum') roomsTab(app, visit, photos);
+  if (tab === 'rum') roomsTab(app, visit, photos, save, drawTabs);
   else if (tab === 'summering') summaryTab(app, visit);
   else objectTab(app, visit, photos, save);
 }
@@ -43,9 +44,10 @@ function objectTab(app, visit, photos, save) {
         },
       }));
 
+  const open = new Set(); // utfällda sektioner
   const questions = h('div', { class: 'stack' });
   const drawQuestions = () => questions.replaceChildren(
-    ...fieldCards(fieldsFor(visit.template.objectFields, visit.objectTypeId), visit.values, () => save()));
+    ...fieldCards(fieldsFor(visit.template.objectFields, visit.objectTypeId), visit.values, () => save(), { open }));
   drawQuestions();
 
   app.show(
@@ -62,37 +64,46 @@ function objectTab(app, visit, photos, save) {
         }, visit.template.objectTypes.map((o) =>
           h('option', { value: o.id, selected: o.id === visit.objectTypeId }, o.label))))),
     questions,
-    customFieldsCard(visit, save),
+    customFieldsCard(visit, save, open),
     notesCard(visit, save),
     photoSection(visit.id, null, photos),
-    h('a', { class: 'btn primary big', href: `#/visit/${visit.id}/rum` }, 'Vidare till rummen'));
+    h('a', { class: 'btn primary big', href: `#/visit/${visit.id}/summering` }, 'Till summeringen'));
 }
 
 // ---------- Rum ----------
 
-function roomsTab(app, visit, photos) {
+function roomsTab(app, visit, photos, save, drawTabs) {
   const template = visit.template;
   const type = byRole(template, 'roomType'), area = byRole(template, 'area'), floor = byRole(template, 'floorType');
+  const roomHref = (room) => `#/visit/${visit.id}/room/${room.id}`;
 
-  const addRoom = async (copyOf) => {
-    const room = copyOf
-      ? { ...structuredClone(copyOf), id: uid(), name: copyOf.name ? `${copyOf.name} (kopia)` : '' }
-      : createRoom(uid(), template, visit.rooms.at(-1));
-    // Nytt rum hamnar sist, en kopia direkt efter originalet.
-    if (copyOf) visit.rooms.splice(visit.rooms.indexOf(copyOf) + 1, 0, room);
-    else visit.rooms.push(room);
-    visit.updated = Date.now();
-    await putVisit(visit);
-    app.go(`#/visit/${visit.id}/room/${room.id}`);
+  const listBox = h('div', { class: 'stack' });
+  const redraw = () => { drawList(); drawTabs(); };
+
+  // En kamerainmatning delas av alla knappar. photoTarget är rummet som fotot ska hamna på,
+  // eller null för "Foto + nytt rum": då skapas rummet när bilden är tagen.
+  let photoTarget = null;
+  const camera = cameraInput(async (files) => {
+    const room = photoTarget || await createFromInput();
+    await addPhotos(files, visit.id, room.id, photos);
+    redraw();
+  });
+  const takePhoto = (room) => { photoTarget = room; camera.click(); };
+
+  const copyRoom = async (room) => {
+    const copy = { ...structuredClone(room), id: uid(), name: room.name ? `${room.name} (kopia)` : '' };
+    visit.rooms.splice(visit.rooms.indexOf(room) + 1, 0, copy);
+    await save.now();
+    app.go(roomHref(copy));
   };
 
-  app.show(
+  const drawList = () => listBox.replaceChildren(
     visit.rooms.length
       ? h('div', { class: 'list' }, visit.rooms.map((room, i) => {
         const missing = roomMissingCount(visit, room);
         const nPhotos = photos.filter((p) => p.roomId === room.id).length;
         return h('div', { class: 'card room-card' },
-          h('a', { class: 'room-main', href: `#/visit/${visit.id}/room/${room.id}` },
+          h('a', { class: 'room-main', href: roomHref(room) },
             h('div', { class: 'card-title' }, `${i + 1}. ${roomTitle(visit, room, i)}`,
               roomCount(room) > 1 && h('span', { class: 'badge ok times' }, `× ${roomCount(room)}`)),
             h('div', { class: 'meta' },
@@ -101,10 +112,76 @@ function roomsTab(app, visit, photos) {
               floor && room.values[floor.id] && h('span', {}, room.values[floor.id]),
               nPhotos > 0 && h('span', {}, `${nPhotos} foto`),
               missing > 0 && h('span', { class: 'badge warn' }, `${missing} saknas`))),
-          h('button', { class: 'btn small', onclick: () => addRoom(room) }, 'Kopiera'));
+          h('div', { class: 'room-actions' },
+            h('button', { class: 'btn small', onclick: () => takePhoto(room) }, 'Foto'),
+            h('button', { class: 'btn small', onclick: () => copyRoom(room) }, 'Kopiera')));
       }))
-      : h('p', { class: 'empty' }, 'Inga rum ännu. Lägg till det första rummet.'),
-    h('button', { class: 'btn primary big', onclick: () => addRoom() }, '+ Lägg till rum'));
+      : h('p', { class: 'empty' }, 'Inga rum ännu. Räkna upp det första rummet i rutan ovan.'));
+
+  // Snabbinmatning: en rad per rum. Rummet skapas och syns i listan utan att man lämnar sidan.
+  const input = h('textarea', {
+    rows: 2, 'aria-label': 'Snabbinmatning',
+    placeholder: 't.ex. WC, fyra kvadrat, klinker, två toaletter',
+  });
+  const result = h('div', { class: 'quick-result' });
+
+  /** Skapar ett rum av texten i rutan. Tom ruta ger ett tomt rum. Returnerar rummet. */
+  const createFromInput = async () => {
+    const text = input.value.trim();
+    const room = createRoom(uid(), template, visit.rooms.at(-1));
+    const r = text ? applyQuickText(visit, room, text) : null;
+    if (r?.rest) room.notes = r.rest; // det otolkade ska inte gå förlorat
+    visit.rooms.push(room);
+    await save.now();
+    input.value = '';
+    result.replaceChildren();
+    if (r) {
+      const i = visit.rooms.indexOf(room);
+      append(result, [
+        h('p', { class: 'quick-ok' }, h('strong', {}, `Rum ${i + 1} tillagt. `),
+          r.understood.length ? r.understood.join(' · ') : 'Inget gick att tolka.'),
+        quickReceipt(r, 'Lagt i anteckningarna').slice(1),
+        h('div', { class: 'row' },
+          h('a', { class: 'btn small', href: roomHref(room) }, 'Öppna rummet'),
+          h('button', {
+            type: 'button', class: 'btn small',
+            onclick: async () => {
+              for (const p of photos.filter((x) => x.roomId === room.id)) {
+                await deletePhoto(p.id);
+                photos.splice(photos.indexOf(p), 1);
+              }
+              visit.rooms.splice(visit.rooms.indexOf(room), 1);
+              await save.now();
+              result.replaceChildren();
+              input.value = text;
+              redraw();
+            },
+          }, 'Ångra')),
+      ]);
+    }
+    return room;
+  };
+
+  drawList();
+  app.show(
+    h('section', { class: 'card' },
+      h('h3', {}, 'Nytt rum'),
+      h('p', { class: 'muted' }, 'Räkna upp det du ser och tryck Lägg till. Tryck på mikrofonen på tangentbordet för att diktera. Tom ruta ger ett tomt rum att fylla i för hand.'),
+      input,
+      h('div', { class: 'row' },
+        h('button', {
+          type: 'button', class: 'btn primary',
+          onclick: async () => {
+            const typed = input.value.trim() !== '';
+            const room = await createFromInput();
+            if (typed) redraw(); else app.go(roomHref(room));
+          },
+        }, 'Lägg till rum'),
+        h('button', { type: 'button', class: 'btn', onclick: () => takePhoto(null) }, 'Foto + nytt rum')),
+      result),
+    camera,
+    listBox);
+
 }
 
 // ---------- Summering ----------
