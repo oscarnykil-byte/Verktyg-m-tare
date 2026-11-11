@@ -4,7 +4,7 @@ import { photoSection } from '../photos.js';
 import { renderField } from '../fields.js';
 import { describeParsed, parseRoomText } from '../quick.js';
 import { applyTypeDefaults, byRole, createRoom, fieldsFor, roomTemplateFields, roomTitle } from '../template.js';
-import { debounce, h, uid } from '../util.js';
+import { append, debounce, h, uid } from '../util.js';
 import { customFieldsCard, fieldCards, notesCard } from './common.js';
 
 export async function roomView(app, { id, roomId }) {
@@ -146,7 +146,8 @@ function quickCard(visit, room, changed) {
 
     const understood = describeParsed(parsed, all);
     const typeName = (typeField && room.values[typeField.id]) || 'rummet';
-    result.replaceChildren(
+    result.replaceChildren();
+    append(result, [
       understood.length
         ? h('p', { class: 'quick-ok' }, 'Ifyllt: ' + understood.join(' · '))
         : h('p', { class: 'quick-miss' }, 'Inget gick att tolka. Prova en uppräkning, t.ex. "kontor, 12 kvadrat, linoleum".'),
@@ -162,7 +163,7 @@ function quickCard(visit, room, changed) {
             changed();
           },
         }, 'Lägg i anteckningar'),
-        h('button', { type: 'button', class: 'btn small', onclick: restore }, 'Ångra')));
+        h('button', { type: 'button', class: 'btn small', onclick: restore }, 'Ångra'))]);
     input.value = '';
     changed();
   };

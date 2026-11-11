@@ -166,6 +166,7 @@ const step = (name) => console.log('✓ ' + name);
   assert.equal(await field('tvattstall').locator('input').inputValue(), '1', 'förvalet för WC gäller');
   assert.equal(await field('_count').locator('input').inputValue(), '5');
   assert.match(await page.locator('.quick-result').innerText(), /Tolkades inte: gul dörr/);
+  assert.doesNotMatch(await page.locator('#main').innerText(), /\b(false|undefined|null)\b/);
   await page.getByRole('button', { name: 'Lägg i anteckningar' }).click();
   assert.equal(await page.getByLabel('Anteckningar').inputValue(), 'gul dörr');
   await shot('2b-snabbinmatning');
